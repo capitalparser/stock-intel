@@ -12,6 +12,12 @@ def _fmt_amount(won: int) -> str:
     return f"{sign}{awk:,}억"
 
 
+def _fmt_table_amount(won: int) -> str:
+    awk = round(won / 1e8)
+    sign = "+" if awk >= 0 else ""
+    return f"{sign}{awk:,}"
+
+
 def _flow_arrow(won: int) -> str:
     """순매수/매도 방향 이모지."""
     if won > 0:
@@ -69,6 +75,21 @@ def _section_supply(supply: dict) -> str:
         f"  기관: {inst_label} {inst_today}  (5일: {inst_5d} {inst_arrow})",
         f"  외국인: {fore_label} {fore_today}  (5일: {fore_5d} {fore_arrow})",
     ]
+    daily = supply.get("daily") or []
+    if daily:
+        lines.extend(
+            [
+                "  최근 10거래일 순매수(억원)",
+                "  날짜        기관     외국인",
+                "  --------------------------",
+            ]
+        )
+        for row in daily[:10]:
+            date = str(row["date"])[5:].replace("-", ".")
+            inst_amt = _fmt_table_amount(row["institution"])
+            fore_amt = _fmt_table_amount(row["foreigner"])
+            lines.append(f"  {date:<5} {inst_amt:>8} {fore_amt:>9}")
+
     return "\n".join(lines)
 
 

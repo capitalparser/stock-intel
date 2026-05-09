@@ -12,6 +12,27 @@ DB_URL 미설정 시 ~/Library/Application Support/kreports/kreports.db (macOS) 
 
 from __future__ import annotations
 
+import os
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+def _try_collect_auditors(corp_code: str | None) -> None:
+    if not corp_code or not os.getenv("DART_API_KEY"):
+        return
+
+    try:
+        from kreports.collector.audit_collector import collect_auditors
+
+        collect_auditors(corp_code)
+    except Exception:
+        # 감사인 정보는 보조 데이터이므로, 수집 실패 시 기존 "데이터 없음"
+        # 경로로 graceful degrade한다.
+        return
+
 
 def fetch_audit_firm(ticker: str) -> dict:
     """kreports로 감사법인 당해/직전 연도 정보 조회.
@@ -44,6 +65,14 @@ def fetch_audit_firm(ticker: str) -> dict:
         return {"error": f"감사법인 데이터를 가져올 수 없습니다: {err_str}"}
 
     history = result.get("history", [])
+    if not history:
+        _try_collect_auditors(result.get("corp_code"))
+        try:
+            result = get_audit_history(ticker)
+            history = result.get("history", [])
+        except Exception:
+            history = []
+
     if not history:
         return {"error": "감사법인 데이터를 찾을 수 없습니다."}
 

@@ -81,7 +81,11 @@ async def check_allowed(update: Update) -> bool:
     """ALLOWED_IDS 미설정 시 모두 허용 (개발 편의)."""
     if not ALLOWED_IDS:
         return True
-    return update.effective_chat.id in ALLOWED_IDS
+    chat_id = update.effective_chat.id
+    allowed = chat_id in ALLOWED_IDS
+    if not allowed:
+        logger.warning("차단된 chat_id: %s (허용 목록: %s)", chat_id, ALLOWED_IDS)
+    return allowed
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +188,16 @@ async def handle_callback(update: Update, context) -> None:
 # ---------------------------------------------------------------------------
 # 진입점
 # ---------------------------------------------------------------------------
+async def post_init(application: Application) -> None:
+    scheduler.start()
+    logger.info("봇 시작. 종목 캐시 갱신 스케줄: 매일 07:00 KST")
+
+
 if __name__ == "__main__":
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^ticker:"))
 
-    scheduler.start()
-    logger.info("봇 시작. 종목 캐시 갱신 스케줄: 매일 07:00 KST")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
