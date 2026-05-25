@@ -105,20 +105,50 @@ class SignalStore:
                 "SELECT * FROM signal_events ORDER BY received_at DESC, id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-        return [
-            SignalEventRow(
-                ticker=str(r["ticker"]),
-                exchange=str(r["exchange"]),
-                market=str(r["market"]),
-                timeframe=str(r["timeframe"]),
-                action=str(r["action"]),
-                base_type=str(r["base_type"]),
-                independence_status=str(r["independence_status"]),
-                filter_status=str(r["filter_status"]),
-                payload_json=str(r["payload_json"]),
-                telegram_sent=bool(r["telegram_sent"]),
-                received_at=int(r["received_at"]),
-            )
-            for r in rows
-        ]
+        return [_row_to_event(r) for r in rows]
 
+    def recent_since(self, since: int, limit: int = 50) -> list[SignalEventRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM signal_events
+                WHERE received_at >= ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (since, limit),
+            ).fetchall()
+        return [_row_to_event(r) for r in rows]
+
+    def latest_for_ticker(self, ticker: str) -> SignalEventRow | None:
+        candidates = {ticker}
+        if ticker.isdigit() and len(ticker) == 6:
+            candidates.add(f"KRX:{ticker}")
+        placeholders = ",".join("?" for _ in candidates)
+        with self._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT * FROM signal_events
+                WHERE ticker IN ({placeholders})
+                ORDER BY received_at DESC, id DESC
+                LIMIT 1
+                """,
+                tuple(candidates),
+            ).fetchone()
+        return _row_to_event(row) if row is not None else None
+
+
+def _row_to_event(row: sqlite3.Row) -> SignalEventRow:
+    return SignalEventRow(
+        ticker=str(row["ticker"]),
+        exchange=str(row["exchange"]),
+        market=str(row["market"]),
+        timeframe=str(row["timeframe"]),
+        action=str(row["action"]),
+        base_type=str(row["base_type"]),
+        independence_status=str(row["independence_status"]),
+        filter_status=str(row["filter_status"]),
+        payload_json=str(row["payload_json"]),
+        telegram_sent=bool(row["telegram_sent"]),
+        received_at=int(row["received_at"]),
+    )

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -38,6 +39,14 @@ from data.fundamental import fetch_fundamental
 from data.short_sell import fetch_short_sell
 from data.supply import fetch_supply
 from data.technical import fetch_technical
+from signals.console import (
+    build_console_keyboard,
+    format_console,
+    format_signal_detail,
+    parse_console_args,
+    parse_console_callback,
+)
+from signals.storage import SignalStore
 from utils.formatter import format_message
 from utils.ticker import refresh_ticker_cache, search_ticker
 
@@ -55,7 +64,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 환경변수
 # ---------------------------------------------------------------------------
-TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
+TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 ALLOWED_IDS: set[int] = {
     int(x.strip())
@@ -174,6 +183,35 @@ async def _lookup_and_reply(update: Update, query: str) -> None:
     await update.message.reply_text("종목을 선택해 주세요:", reply_markup=keyboard)
 
 
+def _signal_store() -> SignalStore:
+    return SignalStore(os.getenv("STATE_DB_PATH", "./state.db"))
+
+
+def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    current = int(now if now is not None else time.time())
+    state = parse_console_args(args)
+    rows = _signal_store().recent_since(current - state.hours * 3600)
+    return (
+        format_console(rows=rows, state=state, now=current),
+        build_console_keyboard(state),
+    )
+
+
+def render_signal_console_callback(data: str, *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    current = int(now if now is not None else time.time())
+    state = parse_console_callback(data)
+    rows = _signal_store().recent_since(current - state.hours * 3600)
+    return (
+        format_console(rows=rows, state=state, now=current),
+        build_console_keyboard(state),
+    )
+
+
+def render_signal_detail(ticker: str, *, now: int | None = None) -> str:
+    row = _signal_store().latest_for_ticker(ticker.strip())
+    return format_signal_detail(row, now=now)
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -242,6 +280,64 @@ async def handle_feed(update: Update, context) -> None:
     await loading.edit_text(text)
 
 
+async def handle_signal_console(update: Update, context) -> None:
+    """/signals — Lazy Alpha 시그널 버튼 콘솔."""
+    if not await check_allowed(update):
+        return
+
+    text, keyboard = await asyncio.to_thread(render_signal_console, list(context.args))
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def handle_buy_console(update: Update, context) -> None:
+    """/buy — 최근 매수 후보."""
+    if not await check_allowed(update):
+        return
+
+    text, keyboard = await asyncio.to_thread(
+        render_signal_console,
+        ["buy", *list(context.args)],
+    )
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def handle_sell_console(update: Update, context) -> None:
+    """/sell — 최근 매도 후보."""
+    if not await check_allowed(update):
+        return
+
+    text, keyboard = await asyncio.to_thread(
+        render_signal_console,
+        ["sell", *list(context.args)],
+    )
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def handle_signal_detail(update: Update, context) -> None:
+    """/signal <ticker> — 특정 종목 최신 Lazy Alpha 판단."""
+    if not await check_allowed(update):
+        return
+
+    ticker = " ".join(context.args).strip()
+    if not ticker:
+        await update.message.reply_text("조회할 종목코드를 같이 보내주세요.\n예) /signal 005930")
+        return
+    text = await asyncio.to_thread(render_signal_detail, ticker)
+    await update.message.reply_text(text)
+
+
+async def handle_signal_console_callback(update: Update, context) -> None:
+    """Lazy Alpha console inline keyboard callback."""
+    query = update.callback_query
+    await query.answer()
+
+    if not await check_allowed(update):
+        return
+
+    text, keyboard = await asyncio.to_thread(render_signal_console_callback, query.data)
+    await query.edit_message_text(text, reply_markup=keyboard)
+
+
 async def handle_start(update: Update, context) -> None:
     """/start 커맨드 핸들러."""
     if not await check_allowed(update):
@@ -251,6 +347,10 @@ async def handle_start(update: Update, context) -> None:
         "종목명을 입력하면 수급현황, 공매도, 기술적 지표, 펀더멘탈, 감사법인을 보여드립니다.\n"
         "DM: 삼성전자 / SK하이닉스 / NAVER\n"
         "그룹: /s 삼성전자 또는 /stock 삼성전자\n\n"
+        "/signals — Lazy Alpha 버튼 콘솔\n"
+        "/buy kr 8h — 최근 국장 매수 후보\n"
+        "/sell 24h — 최근 매도 후보\n"
+        "/signal 005930 — 특정 종목 지표 판단\n"
         "/feed — 최근 BUY 시그널 목록\n"
         "/feed 50 — 최근 50건"
     )
@@ -345,6 +445,10 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("start", handle_start))
     tg_app.add_handler(CommandHandler("ping", handle_ping))
     tg_app.add_handler(CommandHandler("feed", handle_feed))
+    tg_app.add_handler(CommandHandler("signals", handle_signal_console))
+    tg_app.add_handler(CommandHandler("buy", handle_buy_console))
+    tg_app.add_handler(CommandHandler("sell", handle_sell_console))
+    tg_app.add_handler(CommandHandler("signal", handle_signal_detail))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
     tg_app.add_handler(
         MessageHandler(
@@ -353,6 +457,7 @@ async def _run() -> None:
         )
     )
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    tg_app.add_handler(CallbackQueryHandler(handle_signal_console_callback, pattern="^sig:"))
     tg_app.add_handler(CallbackQueryHandler(handle_callback, pattern="^ticker:"))
 
     port = int(os.getenv("PORT", "8080"))

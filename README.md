@@ -38,6 +38,11 @@ Telegram에서 종목명만 보내면 국내 주식 투자 판단에 필요한 �
   - 한국 종목은 `kreports` 감사인 정보로 독립성 차단 여부 표시
   - 미국/일본 종목은 알림을 보내되 원천 감사인 수동 확인 필요로 표시
   - 차단 감사인이면 `🚫 독립성 차단 — 매입 검토 금지` 알림 발송
+- Telegram 시그널 콘솔
+  - `/signals` 버튼형 Lazy Alpha 콘솔
+  - `/buy`, `/sell` 빠른 후보 조회
+  - `/signal <ticker>` 특정 종목의 최신 지표 판단 조회
+  - 기본 기준은 최근 8시간 rolling window
 
 ## Example
 
@@ -193,6 +198,21 @@ node src/cli/index.js watchlist create "Intel Alert Candidates" --file list.txt
 이 CLI 작업은 TradingView Desktop이 로그인된 상태로 `--remote-debugging-port=9222`에 떠 있어야 합니다.
 
 테스트 fixture `tests/fixtures/tradingview_watchlist_kr_actual.json`은 TradingView custom watchlist `국장`에서 2026-05-25에 읽은 실제 관심 심볼을 기준으로 합니다. 6자리 `KRX:` 종목은 감사인 자동조회 대상으로 정규화하고, `KRX:S0X1!`처럼 상장사 종목코드가 아닌 항목은 독립성 수동 확인으로 처리합니다.
+
+## Telegram Signal Console
+
+Telegram에서 저장된 Lazy Alpha webhook ledger를 탐색할 수 있습니다. v1은 TradingView webhook으로 들어온 최근 이벤트 기준이며, TradingView 차트의 현재 상태를 실시간으로 다시 계산하지 않습니다.
+
+```text
+/signals
+/buy
+/buy kr 8h
+/sell 24h
+/signals review us 24h
+/signal 005930
+```
+
+`/signals`는 버튼형 콘솔을 띄웁니다. 버튼은 같은 메시지를 갱신하며, 탭은 `매수`, `매도`, `확인필요`, 시장은 `전체`, `국장`, `미국`, `일본`, 기간은 `4h`, `8h`, `24h`를 지원합니다.
 
 ## Production Direction
 
