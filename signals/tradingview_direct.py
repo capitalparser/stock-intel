@@ -46,6 +46,15 @@ NON_BUY_LABEL_KEYWORDS = (
     "NH",
 )
 
+EXIT_LABEL_KEYWORDS = (
+    "청산",
+    "손절",
+    "익절",
+    "이탈",
+    "종료",
+    "SL",
+)
+
 
 def is_lazy_alpha_buy_label(text: str) -> bool:
     normalized = text.strip()
@@ -54,6 +63,13 @@ def is_lazy_alpha_buy_label(text: str) -> bool:
     if any(keyword in normalized for keyword in NON_BUY_LABEL_KEYWORDS):
         return False
     return any(keyword in normalized for keyword in BUY_LABEL_KEYWORDS)
+
+
+def is_lazy_alpha_exit_label(text: str) -> bool:
+    normalized = text.strip()
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in EXIT_LABEL_KEYWORDS)
 
 
 def map_lazy_alpha_labels_to_outcomes(
@@ -66,28 +82,33 @@ def map_lazy_alpha_labels_to_outcomes(
     horizons: tuple[int, ...] = (5, 10, 20),
     duplicate_window_bars: int = 5,
     entry_policy: str = "first",
+    active_only: bool = False,
 ) -> list[TradingViewLabelOutcome]:
     if not bars:
         return []
     offset = max(0, (total_available or len(bars)) - len(bars))
     candidates: list[tuple[int, dict]] = []
+    exit_bar_indexes: list[int] = []
     for label in labels:
         text = str(label.get("text") or "")
-        if not is_lazy_alpha_buy_label(text):
-            continue
         x_value = label.get("x")
         if not isinstance(x_value, int):
             continue
         bar_index = x_value - offset
         if bar_index < 0 or bar_index >= len(bars):
             continue
-        candidates.append((bar_index, label))
+        if is_lazy_alpha_buy_label(text):
+            candidates.append((bar_index, label))
+        elif is_lazy_alpha_exit_label(text):
+            exit_bar_indexes.append(bar_index)
 
     outcomes: list[TradingViewLabelOutcome] = []
     for cluster in _cluster_candidates(candidates, duplicate_window_bars=duplicate_window_bars):
         selected_bar_index, selected_label = _select_cluster_entry(cluster, entry_policy=entry_policy)
         first_bar_index = cluster[0][0]
         last_bar_index = cluster[-1][0]
+        if active_only and _has_later_exit(last_bar_index, exit_bar_indexes):
+            continue
         text = str(selected_label.get("text") or "")
         entry = _float_or_none(bars[selected_bar_index].get("close"))
         if entry is None or entry == 0:
@@ -118,6 +139,10 @@ def map_lazy_alpha_labels_to_outcomes(
             )
         )
     return outcomes
+
+
+def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:
+    return any(exit_bar_index > last_entry_bar_index for exit_bar_index in exit_bar_indexes)
 
 
 def _cluster_candidates(

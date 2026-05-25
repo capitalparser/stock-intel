@@ -10,7 +10,6 @@ from pathlib import Path
 
 from signals.tradingview_direct import (
     TradingViewLabelOutcome,
-    format_tradingview_direct_report,
     map_lazy_alpha_labels_to_outcomes,
 )
 
@@ -81,6 +80,7 @@ def scan_tradingview_symbols(
                     total_available=ohlcv.get("total_available"),
                     duplicate_window_bars=duplicate_window_bars,
                     entry_policy=entry_policy,
+                    active_only=True,
                 )
             )
             scanned.append(symbol)
@@ -142,5 +142,46 @@ def format_scan_report(
     if errors:
         lines.append("오류: " + " · ".join(f"{symbol}" for symbol, _error in errors[:5]))
     lines.append("")
-    lines.append(format_tradingview_direct_report(outcomes, title="Lazy Alpha 매수 라벨"))
+    lines.extend(format_telegram_outcome_cards(outcomes))
     return "\n".join(lines)
+
+
+def format_telegram_outcome_cards(outcomes: list[TradingViewLabelOutcome]) -> list[str]:
+    if not outcomes:
+        return [
+            "현재 활성 매수 라벨 없음",
+            "진입 이후 손절/청산/이탈 라벨이 나온 경우에는 활성 후보에서 제외했습니다.",
+        ]
+
+    lines = [f"활성 매수 후보: {len(outcomes)}건"]
+    for index, item in enumerate(outcomes, start=1):
+        risk = "없음" if not item.risk_flags else ", ".join(item.risk_flags)
+        status = "정상" if item.score_penalty_hint == 0 else f"주의 penalty {item.score_penalty_hint}"
+        lines.extend(
+            [
+                "",
+                f"{index}. {item.symbol}",
+                f"   일자: {item.signal_date} · 상태: {status}",
+                f"   라벨: {item.label}",
+                f"   가격: {_fmt_price(item.entry_price)} · 중복: {item.duplicate_count}",
+                "   수익률: "
+                f"5일 {_fmt_pct(item.returns.get('5d'))} · "
+                f"10일 {_fmt_pct(item.returns.get('10d'))} · "
+                f"20일 {_fmt_pct(item.returns.get('20d'))}",
+                f"   리스크: {risk}",
+            ]
+        )
+        if item.failure_class:
+            lines.append(f"   실패분류: {item.failure_class}")
+    return lines
+
+
+def _fmt_price(value: float) -> str:
+    return f"{value:,.0f}" if value >= 100 else f"{value:.2f}"
+
+
+def _fmt_pct(value: float | None) -> str:
+    if value is None:
+        return "-"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.2f}%"

@@ -7,6 +7,7 @@ from signals.tradingview_scan_runner import (
     normalize_scan_symbol,
     symbols_from_universe,
 )
+from signals.tradingview_direct import TradingViewLabelOutcome
 
 
 def test_normalize_scan_symbol_adds_default_exchange_prefixes():
@@ -53,3 +54,28 @@ def test_format_scan_report_includes_webhook_distinction_when_empty():
     assert "TradingView 직접 스캔" in text
     assert "웹훅 저장소가 아니라" in text
     assert "NASDAQ:AAPL" in text
+
+
+def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-04-24",
+        first_signal_date="2026-04-24",
+        last_signal_date="2026-04-24",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=271.12,
+        returns={"5d": 3.35, "10d": 8.21, "20d": 13.93},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_scan_report(outcomes=[outcome], errors=[], scanned=["NASDAQ:AAPL"])
+
+    assert "symbol | date" not in text
+    assert "━━━━━━━━" not in text
+    assert "1. NASDAQ:AAPL" in text
+    assert "라벨: 💰 진입" in text
+    assert "수익률: 5일 +3.35%" in text

@@ -3,6 +3,7 @@ from signals.tradingview_direct import (
     classify_pre_signal_risks,
     format_tradingview_direct_report,
     is_lazy_alpha_buy_label,
+    is_lazy_alpha_exit_label,
     map_lazy_alpha_labels_to_outcomes,
 )
 
@@ -14,6 +15,13 @@ def test_is_lazy_alpha_buy_label_filters_signal_texts():
     assert is_lazy_alpha_buy_label("💸 최종 청산") is False
     assert is_lazy_alpha_buy_label("PBB") is False
     assert is_lazy_alpha_buy_label("🛠️ 셋업 형성 중") is False
+
+
+def test_is_lazy_alpha_exit_label_identifies_position_reset_texts():
+    assert is_lazy_alpha_exit_label("💸 최종 청산") is True
+    assert is_lazy_alpha_exit_label("🛑 손절") is True
+    assert is_lazy_alpha_exit_label("20일선 이탈") is True
+    assert is_lazy_alpha_exit_label("💰 진입") is False
 
 
 def test_map_lazy_alpha_labels_to_outcomes_maps_x_to_chart_bar():
@@ -85,6 +93,56 @@ def test_map_lazy_alpha_labels_clusters_duplicate_entry_signals():
     assert first[0].first_signal_date != first[0].last_signal_date
     assert last[0].entry_price == 150
     assert last[0].duplicate_count == 3
+
+
+def test_map_lazy_alpha_labels_resets_entry_after_later_exit_label():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(70)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 45, "price": None},
+        {"text": "🛑 손절", "x": 48, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        bars=bars,
+        labels=labels,
+        total_available=70,
+        duplicate_window_bars=5,
+        horizons=(5,),
+        active_only=True,
+    )
+
+    assert outcomes == []
+
+
+def test_map_lazy_alpha_labels_keeps_latest_entry_after_prior_exit_label():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(80)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 40, "price": None},
+        {"text": "💸 최종 청산", "x": 45, "price": None},
+        {"text": "💰 진입", "x": 60, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        bars=bars,
+        labels=labels,
+        total_available=80,
+        duplicate_window_bars=5,
+        horizons=(5,),
+        active_only=True,
+    )
+
+    assert len(outcomes) == 1
+    assert outcomes[0].entry_price == 160
 
 
 def test_classify_lazy_alpha_failure_separates_common_failure_modes():
