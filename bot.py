@@ -290,6 +290,14 @@ def is_signal_console_text(text: str) -> bool:
     return text.strip().lower() in _SIGNAL_CONSOLE_TEXT_SHORTCUTS
 
 
+def parse_signal_console_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in {"신호", "시그널", "signals", "signal"}:
+        return args
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -521,8 +529,9 @@ async def handle_text(update: Update, context) -> None:
     if is_help_text(query):
         await update.message.reply_text(HELP_TEXT)
         return
-    if is_signal_console_text(query):
-        text, keyboard = await asyncio.to_thread(render_signal_console, [])
+    signal_args = parse_signal_console_text(query)
+    if signal_args is not None:
+        text, keyboard = await asyncio.to_thread(render_signal_console, signal_args or [])
         await update.message.reply_text(text, reply_markup=keyboard)
         return
     await _lookup_and_reply(update, query)

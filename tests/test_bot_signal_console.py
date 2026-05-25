@@ -71,6 +71,13 @@ def test_signal_text_shortcuts_open_signal_console():
     assert bot.is_signal_console_text("삼성전자") is False
 
 
+def test_parse_signal_console_text_supports_args_and_slash():
+    assert bot.parse_signal_console_text("/신호 점수") == ["점수"]
+    assert bot.parse_signal_console_text("신호 kr 점수") == ["kr", "점수"]
+    assert bot.parse_signal_console_text("/signals us score") == ["us", "score"]
+    assert bot.parse_signal_console_text("삼성전자") is None
+
+
 def test_strip_korean_slash_command_handles_args_and_bot_suffix():
     command, args = bot._strip_korean_slash_command("/신호@stock_intel_bot kr 8h")
 
