@@ -19,6 +19,8 @@ class TradingViewLabelOutcome:
     entry_price: float
     returns: dict[str, float | None]
     context: dict[str, float | None]
+    risk_flags: list[str]
+    score_penalty_hint: int
     failure_class: str | None = None
 
 
@@ -92,6 +94,11 @@ def map_lazy_alpha_labels_to_outcomes(
             continue
         returns = _forward_returns(bars, selected_bar_index, entry, horizons)
         context = _context_metrics(bars, selected_bar_index, entry)
+        risk_flags = classify_pre_signal_risks(
+            label=text,
+            context=context,
+            duplicate_count=len(cluster),
+        )
         failure_class = classify_lazy_alpha_failure(returns=returns, context=context)
         outcomes.append(
             TradingViewLabelOutcome(
@@ -105,6 +112,8 @@ def map_lazy_alpha_labels_to_outcomes(
                 entry_price=entry,
                 returns=returns,
                 context=context,
+                risk_flags=risk_flags,
+                score_penalty_hint=score_penalty_hint(risk_flags),
                 failure_class=failure_class,
             )
         )
@@ -161,6 +170,46 @@ def classify_lazy_alpha_failure(
     return "미분류: 뉴스/섹터/실적 확인 필요"
 
 
+def classify_pre_signal_risks(
+    *,
+    label: str,
+    context: dict[str, float | None],
+    duplicate_count: int,
+) -> list[str]:
+    flags: list[str] = []
+    if "추매" in label:
+        flags.append("PYRAMID_ADD")
+    if "추매 2" in label or "추매 3" in label:
+        flags.append("LATE_PYRAMID_ADD")
+    if duplicate_count >= 2:
+        flags.append("DUPLICATE_SIGNAL_CLUSTER")
+    if (context.get("prior_20d_return_pct") or 0) >= 50:
+        flags.append("EXTREME_20D_RUNUP")
+    elif (context.get("prior_20d_return_pct") or 0) >= 30:
+        flags.append("HOT_20D_RUNUP")
+    if (context.get("dist_sma20_pct") or 0) >= 25:
+        flags.append("SMA20_EXTENSION")
+    if (context.get("dist_sma50_pct") or 0) >= 40:
+        flags.append("SMA50_EXTENSION")
+    if (context.get("stop_distance_pct") or 0) >= 30:
+        flags.append("STOP_TOO_WIDE")
+    return flags
+
+
+def score_penalty_hint(risk_flags: list[str]) -> int:
+    penalties = {
+        "PYRAMID_ADD": 3,
+        "LATE_PYRAMID_ADD": 5,
+        "DUPLICATE_SIGNAL_CLUSTER": 3,
+        "HOT_20D_RUNUP": 5,
+        "EXTREME_20D_RUNUP": 10,
+        "SMA20_EXTENSION": 6,
+        "SMA50_EXTENSION": 6,
+        "STOP_TOO_WIDE": 8,
+    }
+    return min(25, sum(penalties.get(flag, 0) for flag in set(risk_flags)))
+
+
 def format_tradingview_direct_report(outcomes: list[TradingViewLabelOutcome], *, title: str) -> str:
     lines = [title, f"샘플: {len(outcomes)}건", ""]
     if not outcomes:
@@ -170,7 +219,11 @@ def format_tradingview_direct_report(outcomes: list[TradingViewLabelOutcome], *,
     if classified:
         lines.append("실패 유형: " + " · ".join(f"{name} {count}건" for name, count in classified.items()))
         lines.append("")
-    lines.append("symbol | date | dup | label | price | 5d | 10d | 20d | class")
+    risk_flagged = Counter(flag for item in outcomes for flag in item.risk_flags)
+    if risk_flagged:
+        lines.append("사전 리스크: " + " · ".join(f"{name} {count}건" for name, count in risk_flagged.items()))
+        lines.append("")
+    lines.append("symbol | date | dup | penalty | label | price | 5d | 10d | 20d | class")
     lines.append("-" * 96)
     for item in outcomes:
         lines.append(
@@ -179,6 +232,7 @@ def format_tradingview_direct_report(outcomes: list[TradingViewLabelOutcome], *,
                     item.symbol,
                     item.signal_date,
                     str(item.duplicate_count),
+                    str(item.score_penalty_hint),
                     item.label,
                     _fmt_price(item.entry_price),
                     _fmt_pct(item.returns.get("5d")),
