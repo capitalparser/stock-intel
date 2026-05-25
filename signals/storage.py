@@ -152,6 +152,19 @@ class SignalStore:
             ).fetchall()
         return [_row_to_event(r) for r in rows]
 
+    def events_for_audit(self, *, limit: int = 200, action: str = "BUY") -> list[SignalEventRow]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM signal_events
+                WHERE action = ?
+                ORDER BY received_at DESC, id DESC
+                LIMIT ?
+                """,
+                (action, limit),
+            ).fetchall()
+        return [_row_to_event(r) for r in rows]
+
     def latest_for_ticker(self, ticker: str) -> SignalEventRow | None:
         candidates = {ticker}
         if ticker.isdigit() and len(ticker) == 6:
