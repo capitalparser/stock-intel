@@ -11,6 +11,7 @@ import os
 import socket
 import time
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -48,6 +49,12 @@ from signals.console import (
     parse_console_callback,
 )
 from signals.storage import SignalStore
+from signals.tradingview_scan_runner import (
+    format_scan_report,
+    normalize_scan_symbol,
+    scan_tradingview_symbols,
+    symbols_from_universe,
+)
 from signals.universe import (
     format_universe_summary,
     load_universe_snapshot,
@@ -89,6 +96,8 @@ HELP_TEXT = (
     "DM: 삼성전자 / SK하이닉스 / NAVER\n"
     "그룹: /종목 삼성전자 또는 /s 삼성전자\n\n"
     "/신호 — Lazy Alpha 버튼 콘솔\n"
+    "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
+    "/스캔 us 5 — 관심 universe 중 미국 5종목 직접 스캔\n"
     "/신호 kr 8h — 최근 국장 매수 후보\n"
     "/종목 005930 — 특정 종목 Lazy Alpha 판단\n"
     "/조회 삼성전자 — 종목 리서치\n"
@@ -99,6 +108,7 @@ HELP_TEXT = (
 )
 _HELP_TEXT_SHORTCUTS = {"기능", "도움말", "메뉴", "help"}
 _SIGNAL_CONSOLE_TEXT_SHORTCUTS = {"시그널", "신호", "signals", "signal"}
+_TRADINGVIEW_SCAN_TEXT_SHORTCUTS = {"스캔", "현재신호", "tvscan", "scan"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -282,6 +292,59 @@ def render_signal_detail(ticker: str, *, now: int | None = None) -> str:
     return format_signal_detail(row, now=now)
 
 
+def render_tradingview_scan(args: list[str]) -> str:
+    options = parse_tradingview_scan_args(args)
+    result = scan_tradingview_symbols(
+        options["symbols"],
+        mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
+        bars=500,
+        max_labels=200,
+        timeframe="D",
+        sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
+    )
+    outcomes = result.outcomes
+    if options["sort"] == "SCORE":
+        outcomes = sorted(
+            outcomes,
+            key=lambda item: (item.score_penalty_hint, item.signal_date),
+        )
+    return format_scan_report(outcomes=outcomes, errors=result.errors, scanned=result.scanned)
+
+
+def parse_tradingview_scan_args(args: list[str]) -> dict:
+    market: str | None = None
+    limit = 5
+    sort = "TIME"
+    symbols: list[str] = []
+    for arg in args:
+        value = arg.strip()
+        lowered = value.lower()
+        if not value or lowered in {"관심", "universe", "watchlist", "watchlists"}:
+            continue
+        if lowered in {"kr", "국장", "korea"}:
+            market = "KR"
+            continue
+        if lowered in {"us", "미장", "usa"}:
+            market = "US"
+            continue
+        if lowered in {"jp", "일본", "japan"}:
+            market = "JP"
+            continue
+        if lowered in {"점수", "점수순", "score", "scores", "rank"}:
+            sort = "SCORE"
+            continue
+        if lowered.isdigit() and len(lowered) != 6:
+            limit = max(1, min(int(lowered), 10))
+            continue
+        symbols.append(normalize_scan_symbol(value))
+
+    if not symbols:
+        symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=limit, market=market)
+    else:
+        symbols = symbols[:limit]
+    return {"symbols": symbols, "market": market, "limit": limit, "sort": sort}
+
+
 def is_help_text(text: str) -> bool:
     return text.strip().lower() in _HELP_TEXT_SHORTCUTS
 
@@ -294,6 +357,14 @@ def parse_signal_console_text(text: str) -> list[str] | None:
     command, args = _strip_korean_slash_command(text)
     normalized = command.strip().lower()
     if normalized in {"신호", "시그널", "signals", "signal"}:
+        return args
+    return None
+
+
+def parse_tradingview_scan_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _TRADINGVIEW_SCAN_TEXT_SHORTCUTS:
         return args
     return None
 
@@ -428,6 +499,22 @@ async def handle_korean_signal_command(update: Update, context) -> None:
     await update.message.reply_text(text, reply_markup=keyboard)
 
 
+async def handle_tradingview_scan_command(update: Update, context) -> None:
+    """/스캔 텍스트 트리거. TradingView 차트에서 Lazy Alpha 라벨을 직접 읽는다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    loading = await update.message.reply_text("📡 TradingView 직접 스캔 중... 기본 5종목만 먼저 확인합니다.")
+    try:
+        text = await asyncio.to_thread(render_tradingview_scan, args)
+    except Exception as exc:
+        logger.exception("tradingview direct scan failed")
+        await loading.edit_text(f"⚠️ TradingView 직접 스캔 실패: {exc!s}")
+        return
+    await loading.edit_text(_truncate_telegram_text(text))
+
+
 async def handle_korean_stock_command(update: Update, context) -> None:
     """/종목 텍스트 트리거. Lazy Alpha 판단을 우선 보여주고, 저장값이 없으면 일반 종목 조회로 fallback."""
     if not await check_allowed(update):
@@ -534,7 +621,24 @@ async def handle_text(update: Update, context) -> None:
         text, keyboard = await asyncio.to_thread(render_signal_console, signal_args or [])
         await update.message.reply_text(text, reply_markup=keyboard)
         return
+    scan_args = parse_tradingview_scan_text(query)
+    if scan_args is not None:
+        loading = await update.message.reply_text("📡 TradingView 직접 스캔 중... 기본 5종목만 먼저 확인합니다.")
+        try:
+            text = await asyncio.to_thread(render_tradingview_scan, scan_args)
+        except Exception as exc:
+            logger.exception("tradingview direct scan failed")
+            await loading.edit_text(f"⚠️ TradingView 직접 스캔 실패: {exc!s}")
+            return
+        await loading.edit_text(_truncate_telegram_text(text))
+        return
     await _lookup_and_reply(update, query)
+
+
+def _truncate_telegram_text(text: str, *, limit: int = 3900) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 40].rstrip() + "\n\n... 일부 결과 생략"
 
 
 async def handle_callback(update: Update, context) -> None:
@@ -594,6 +698,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("buy", handle_buy_console))
     tg_app.add_handler(CommandHandler("sell", handle_sell_console))
     tg_app.add_handler(CommandHandler("signal", handle_signal_detail))
+    tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
     tg_app.add_handler(
         MessageHandler(
@@ -605,6 +710,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/신호(?:@\S+)?(?:\s+.*)?$"),
             handle_korean_signal_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:스캔|현재신호)(?:@\S+)?(?:\s+.*)?$"),
+            handle_tradingview_scan_command,
         )
     )
     tg_app.add_handler(
