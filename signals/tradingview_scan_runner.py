@@ -192,8 +192,10 @@ def format_telegram_outcome_cards(
 ) -> list[str]:
     if not outcomes:
         return [
-            "현재 활성 매수 라벨 없음",
-            "진입 이후 손절/청산/이탈 라벨이 나온 경우에는 활성 후보에서 제외했습니다.",
+            "활성 매수 후보: 0건",
+            "",
+            "판정: 현재 매수 후보 없음",
+            "진입 이후 손절/청산/이탈/SELL 라벨이 나온 종목은 활성 후보에서 제외했습니다.",
         ]
 
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
@@ -203,32 +205,36 @@ def format_telegram_outcome_cards(
         combined_risks = [*item.risk_flags, *priority_risks]
         risk = "없음" if not combined_risks else ", ".join(combined_risks)
         adjusted_penalty = adjusted_priority_penalty(item)
-        status = "정상" if adjusted_penalty == 0 else f"주의 penalty {adjusted_penalty}"
+        score = max(0, 100 - adjusted_penalty)
+        status = "매수 후보 유지" if adjusted_penalty == 0 else f"주의 필요 · 감점 {adjusted_penalty}"
+        price_unit = "원" if item.market == "KR" else ""
         lines.extend(
             [
                 "",
-                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
-                f"   일자: {item.signal_date} · 상태: {status}",
-                f"   라벨: {item.label}",
-                f"   가격: {_fmt_price(item.entry_price)} · 중복: {item.duplicate_count}",
-                "   수익률: "
-                f"5일 {_fmt_pct(item.returns.get('5d'))} · "
-                f"10일 {_fmt_pct(item.returns.get('10d'))} · "
-                f"20일 {_fmt_pct(item.returns.get('20d'))}",
-                f"   리스크: {risk}",
+                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)} · 기술점수 {score}점",
+                f"판정: {status}",
+                f"시그널: {item.signal_date} · {item.label} · 중복 {item.duplicate_count}회",
+                f"가격: {_fmt_price(item.entry_price)}{price_unit}",
+                (
+                    "이후 흐름: "
+                    f"5일 {_fmt_pct(item.returns.get('5d'))} / "
+                    f"10일 {_fmt_pct(item.returns.get('10d'))} / "
+                    f"20일 {_fmt_pct(item.returns.get('20d'))}"
+                ),
+                f"감점 사유: {risk}",
             ]
         )
         enrichment = (enrichments or {}).get(item.symbol)
         if enrichment:
             lines.extend(
                 [
-                    f"   수급: {enrichment.supply}",
-                    f"   펀더멘탈: {enrichment.fundamental}",
-                    f"   감사인: {enrichment.auditor}",
+                    f"수급: {enrichment.supply}",
+                    f"실적/밸류: {enrichment.fundamental}",
+                    f"감사인: {enrichment.auditor}",
                 ]
             )
         if item.failure_class:
-            lines.append(f"   실패분류: {item.failure_class}")
+            lines.append(f"실패분류: {item.failure_class}")
     return lines
 
 
@@ -295,7 +301,15 @@ def _format_fundamental_summary(fundamental: dict) -> str:
 
 
 def _format_auditor_summary(status: str, auditor: str | None, reason: str) -> str:
-    return f"{status} · {auditor or '-'} · {reason}"
+    labels = {
+        "BLOCKED_CONFIRMED": "독립성 차단",
+        "BLOCKED_POSSIBLE": "독립성 차단 가능",
+        "CLEAR_CONFIRMED": "차단 없음",
+        "ROLLOVER_INFERRED": "감사인 추정 확인 필요",
+        "MANUAL_VERIFY_CURRENT_YEAR": "현재연도 감사인 확인 필요",
+        "DATA_MISSING": "감사인 데이터 없음",
+    }
+    return f"{labels.get(status, status)} · {auditor or '-'} · {reason}"
 
 
 def _fmt_amount_krw(value: int | float | None, *, signed: bool = True) -> str:

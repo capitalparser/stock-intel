@@ -81,6 +81,8 @@ def test_parse_signal_console_text_supports_args_and_slash():
 def test_parse_tradingview_scan_text_supports_korean_scan_command():
     assert bot.parse_tradingview_scan_text("/스캔 NASDAQ:AAPL 3") == ["NASDAQ:AAPL", "3"]
     assert bot.parse_tradingview_scan_text("현재신호 us 5 점수") == ["us", "5", "점수"]
+    assert bot.parse_tradingview_scan_text("/국장스캔") == ["국장", "점수", "50", "동기화"]
+    assert bot.parse_tradingview_scan_text("krscan 20") == ["국장", "점수", "50", "동기화", "20"]
     assert bot.parse_tradingview_scan_text("/tvscan KRX:005930") == ["KRX:005930"]
     assert bot.parse_tradingview_scan_text("삼성전자") is None
 
