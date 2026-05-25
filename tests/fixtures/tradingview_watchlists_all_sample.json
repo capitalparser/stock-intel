@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "active": {"id": "red", "type": "color"},
+  "lists": [
+    {
+      "type": "custom",
+      "id": 191623871,
+      "name": "국장",
+      "symbols": ["KRX:005930", "KRX:399720", "KRX:S0X1!"]
+    },
+    {
+      "type": "custom",
+      "id": 191773011,
+      "name": "관심",
+      "symbols": ["NASDAQ:AAPL", "NYSE:DELL", "KRX:005930", "AMEX:SPY", "TVC:VIX"]
+    },
+    {
+      "type": "custom",
+      "id": 324984174,
+      "name": "업비트",
+      "symbols": ["UPBIT:BTCKRW"]
+    },
+    {
+      "type": "color",
+      "id": "red",
+      "name": "red",
+      "symbols": ["NASDAQ:AAPL", "COINBASE:BTCUSDC"]
+    }
+  ]
+}

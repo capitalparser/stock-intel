@@ -47,6 +47,12 @@ from signals.console import (
     parse_console_callback,
 )
 from signals.storage import SignalStore
+from signals.universe import (
+    format_universe_summary,
+    load_universe_snapshot,
+    symbol_in_universe,
+    sync_universe_from_tradingview,
+)
 from utils.formatter import format_message
 from utils.ticker import refresh_ticker_cache, search_ticker
 
@@ -82,6 +88,8 @@ HELP_TEXT = (
     "DM: 삼성전자 / SK하이닉스 / NAVER\n"
     "그룹: /s 삼성전자 또는 /stock 삼성전자\n\n"
     "/signals — Lazy Alpha 버튼 콘솔\n"
+    "/universe — TradingView watchlist universe 요약\n"
+    "/sync_universe — TradingView watchlist universe 동기화\n"
     "/buy kr 8h — 최근 국장 매수 후보\n"
     "/sell 24h — 최근 매도 후보\n"
     "/signal 005930 — 특정 종목 지표 판단\n"
@@ -201,6 +209,33 @@ def _signal_store() -> SignalStore:
     return SignalStore(os.getenv("STATE_DB_PATH", "./state.db"))
 
 
+def _universe_snapshot_path() -> str:
+    return os.getenv("UNIVERSE_SNAPSHOT_PATH", "./state/universe_snapshot.json")
+
+
+def _load_universe_snapshot():
+    return load_universe_snapshot(_universe_snapshot_path())
+
+
+def _filter_rows_to_universe(rows):
+    snapshot = _load_universe_snapshot()
+    if snapshot is None:
+        return rows
+    return [row for row in rows if symbol_in_universe(row.ticker, snapshot)]
+
+
+def render_universe_summary() -> str:
+    return format_universe_summary(_load_universe_snapshot())
+
+
+def render_sync_universe() -> str:
+    snapshot = sync_universe_from_tradingview(
+        mcp_dir=os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp"),
+        output_path=_universe_snapshot_path(),
+    )
+    return "동기화 완료\n" + format_universe_summary(snapshot)
+
+
 def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
     current = int(now if now is not None else time.time())
     state = parse_console_args(args)
@@ -210,6 +245,7 @@ def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[s
         if state.view == "ACTIVE"
         else store.recent_since(current - state.hours * 3600)
     )
+    rows = _filter_rows_to_universe(rows)
     return (
         format_console(rows=rows, state=state, now=current),
         build_console_keyboard(state),
@@ -225,6 +261,7 @@ def render_signal_console_callback(data: str, *, now: int | None = None) -> tupl
         if state.view == "ACTIVE"
         else store.recent_since(current - state.hours * 3600)
     )
+    rows = _filter_rows_to_universe(rows)
     return (
         format_console(rows=rows, state=state, now=current),
         build_console_keyboard(state),
@@ -370,6 +407,30 @@ async def handle_signal_console_callback(update: Update, context) -> None:
     await query.edit_message_text(text, reply_markup=keyboard)
 
 
+async def handle_universe(update: Update, context) -> None:
+    """/universe — TradingView watchlist universe summary."""
+    if not await check_allowed(update):
+        return
+
+    text = await asyncio.to_thread(render_universe_summary)
+    await update.message.reply_text(text)
+
+
+async def handle_sync_universe(update: Update, context) -> None:
+    """/sync_universe — sync TradingView watchlists into local universe."""
+    if not await check_allowed(update):
+        return
+
+    loading = await update.message.reply_text("🌐 TradingView watchlist universe 동기화 중...")
+    try:
+        text = await asyncio.to_thread(render_sync_universe)
+    except Exception as exc:
+        logger.exception("universe sync failed")
+        await loading.edit_text(f"⚠️ universe 동기화 실패: {exc!s}")
+        return
+    await loading.edit_text(text)
+
+
 async def handle_start(update: Update, context) -> None:
     """/start 커맨드 핸들러."""
     if not await check_allowed(update):
@@ -475,6 +536,8 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("ping", handle_ping))
     tg_app.add_handler(CommandHandler("feed", handle_feed))
     tg_app.add_handler(CommandHandler("signals", handle_signal_console))
+    tg_app.add_handler(CommandHandler("universe", handle_universe))
+    tg_app.add_handler(CommandHandler(["sync_universe", "syncuniverse"], handle_sync_universe))
     tg_app.add_handler(CommandHandler("buy", handle_buy_console))
     tg_app.add_handler(CommandHandler("sell", handle_sell_console))
     tg_app.add_handler(CommandHandler("signal", handle_signal_detail))

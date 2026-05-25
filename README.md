@@ -199,12 +199,16 @@ node src/cli/index.js watchlist create "Intel Alert Candidates" --file list.txt
 
 테스트 fixture `tests/fixtures/tradingview_watchlist_kr_actual.json`은 TradingView custom watchlist `국장`에서 2026-05-25에 읽은 실제 관심 심볼을 기준으로 합니다. 6자리 `KRX:` 종목은 감사인 자동조회 대상으로 정규화하고, `KRX:S0X1!`처럼 상장사 종목코드가 아닌 항목은 독립성 수동 확인으로 처리합니다.
 
+`/sync_universe`는 TradingView Desktop에 로그인된 상태의 모든 custom/color watchlist를 읽어 `state/universe_snapshot.json`으로 저장합니다. `국장`, `관심`, `예비 버블종목`, color list 등을 물리적으로 합치지 않고, 봇 내부에서 합집합 universe로 사용합니다. 국장 6자리 종목은 감사인 자동조회 대상이고, ETF/지수/코인/선물/환율 심볼은 universe에는 남기되 감사인 자동조회에서는 제외합니다.
+
 ## Telegram Signal Console
 
 Telegram에서 저장된 Lazy Alpha webhook ledger와 현재 활성 시그널 상태를 탐색할 수 있습니다. v1은 TradingView webhook으로 들어온 이벤트를 기준으로 active state를 갱신하며, TradingView 차트의 현재 상태를 실시간으로 다시 계산하지 않습니다.
 
 ```text
 /signals
+/universe
+/sync_universe
 /buy
 /buy kr 8h
 /sell 24h
@@ -215,6 +219,8 @@ Telegram에서 저장된 Lazy Alpha webhook ledger와 현재 활성 시그널 �
 ```
 
 `/signals`는 버튼형 콘솔을 띄웁니다. 기본 보기는 `현재 활성`입니다. `BUY` 계열 webhook이 들어오면 active 상태가 생성 또는 갱신되고, `SELL` webhook이 들어오면 해당 종목의 active 상태가 종료됩니다. 버튼은 같은 메시지를 갱신하며, 보기 전환은 `현재 활성`/`최근 발생`, 탭은 `매수`, `매도`, `확인필요`, 시장은 `전체`, `국장`, `미국`, `일본`, 기간은 `4h`, `8h`, `24h`를 지원합니다.
+
+Universe snapshot이 있으면 `/signals`는 TradingView 전체 watchlist 합집합 안에 있는 종목만 보여줍니다. snapshot이 없으면 기존처럼 저장된 모든 webhook 이벤트를 보여줍니다.
 
 `시그널`, `신호`, `signals` 같은 일반 텍스트도 종목 검색으로 보내지 않고 `/signals` 콘솔을 엽니다.
 
