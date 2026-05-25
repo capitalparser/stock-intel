@@ -21,7 +21,7 @@ def test_blocked_status_line():
         load_signal("tradingview_v6_2_buy_samsung.json"),
         Market("KR", "한국"),
         FilterDecision(True, "ALLOWED", ""),
-        IndependenceDecision("BLOCKED", "차단 감사인", "삼정회계법인"),
+        IndependenceDecision("BLOCKED_CONFIRMED", "차단 감사인", "삼정회계법인"),
     )
     assert text.splitlines()[0] == "🚫 독립성 차단 — 매입 검토 금지"
 
@@ -44,8 +44,7 @@ def test_clear_status_line_and_heat_warning():
         signal,
         Market("KR", "한국"),
         FilterDecision(True, "ALLOWED", ""),
-        IndependenceDecision("CLEAR", "차단 감사인 없음", "한영회계법인"),
+        IndependenceDecision("CLEAR_CONFIRMED", "차단 감사인 없음", "한영회계법인"),
     )
     assert text.splitlines()[0] == "🟢 매수 시그널 — 독립성 차단 없음"
     assert "시그마 과열" in text
-

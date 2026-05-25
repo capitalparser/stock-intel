@@ -25,13 +25,13 @@ async def test_pipeline_sends_blocked_korean_alert(tmp_path):
 
     pipeline = SignalPipeline(
         store=SignalStore(tmp_path / "signals.db"),
-        audit_lookup=lambda ticker: {"current_firm": "삼정회계법인"},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "삼정회계법인"},
         send_message=sender,
     )
 
     result = await pipeline.handle_payload(load_payload("tradingview_v6_2_buy_samsung.json"))
 
-    assert result.independence_status == "BLOCKED"
+    assert result.independence_status == "BLOCKED_CONFIRMED"
     assert result.telegram_sent is True
     assert sent[0].startswith("🚫 독립성 차단")
 
@@ -88,7 +88,7 @@ async def test_pipeline_allowed_buy_creates_active_signal_state(tmp_path):
     store = SignalStore(tmp_path / "signals.db")
     pipeline = SignalPipeline(
         store=store,
-        audit_lookup=lambda ticker: {"current_firm": "한영회계법인"},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "한영회계법인"},
         send_message=sender,
     )
 
@@ -97,7 +97,7 @@ async def test_pipeline_allowed_buy_creates_active_signal_state(tmp_path):
     active = store.active_signals()
     assert len(active) == 1
     assert active[0].ticker == "005930"
-    assert active[0].independence_status == "CLEAR"
+    assert active[0].independence_status == "CLEAR_CONFIRMED"
 
 
 @pytest.mark.asyncio

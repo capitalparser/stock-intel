@@ -194,4 +194,5 @@ def test_kr_enrichment_adds_supply_fundamental_and_auditor_to_cards():
 
     assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
     assert "펀더멘탈: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text
-    assert "감사인: BLOCKED · 삼정회계법인 · 차단 감사인: 삼정회계법인" in text
+    assert "감사인: MANUAL_VERIFY_CURRENT_YEAR · 삼정회계법인" in text
+    assert "2026 감사인 직접 확인 없음" in text

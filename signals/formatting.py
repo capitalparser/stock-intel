@@ -39,10 +39,14 @@ def format_signal_alert(
 
 
 def _status_line(status: str) -> str:
-    if status == "BLOCKED":
+    if status == "BLOCKED_CONFIRMED":
         return "🚫 독립성 차단 — 매입 검토 금지"
-    if status == "CLEAR":
+    if status == "BLOCKED_POSSIBLE":
+        return "🚫 독립성 차단 가능 — 원천 확인 전 매입 보류"
+    if status == "CLEAR_CONFIRMED":
         return "🟢 매수 시그널 — 독립성 차단 없음"
+    if status == "ROLLOVER_INFERRED":
+        return "🟡 감사인 추정 — 원천 확인 전 매입 보류"
     return "🟡 독립성 확인 필요 — 원천 확인 전 매입 보류"
 
 
@@ -55,4 +59,3 @@ def _heat_line(signal: TradingViewSignal) -> str:
     if warnings:
         return "과열: " + ", ".join(warnings)
     return f"과열: 특이 없음 (z={signal.sb_z_score:.2f})"
-

@@ -56,7 +56,7 @@ async def test_pipeline_uses_actual_kr_watchlist_symbol_for_korean_audit_lookup(
 
     def audit_lookup(ticker: str) -> dict:
         lookup_tickers.append(ticker)
-        return {"current_firm": "삼정회계법인"}
+        return {"current_year": 2026, "current_firm": "삼정회계법인"}
 
     pipeline = SignalPipeline(
         store=SignalStore(tmp_path / "signals.db"),
@@ -67,7 +67,7 @@ async def test_pipeline_uses_actual_kr_watchlist_symbol_for_korean_audit_lookup(
     result = await pipeline.handle_payload(make_payload("KRX:399720"))
 
     assert lookup_tickers == ["399720"]
-    assert result.independence_status == "BLOCKED"
+    assert result.independence_status == "BLOCKED_CONFIRMED"
     assert sent[0].startswith("🚫 독립성 차단")
 
 
@@ -93,5 +93,5 @@ async def test_pipeline_does_not_audit_lookup_actual_kr_non_equity_symbol(tmp_pa
     result = await pipeline.handle_payload(make_payload("KRX:S0X1!"))
 
     assert lookup_tickers == []
-    assert result.independence_status == "MANUAL_VERIFY"
+    assert result.independence_status == "DATA_MISSING"
     assert sent[0].startswith("🟡 독립성 확인 필요")
