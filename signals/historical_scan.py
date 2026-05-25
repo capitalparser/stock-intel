@@ -112,6 +112,8 @@ def _with_indicators(df: pd.DataFrame) -> pd.DataFrame:
     enriched["SMA_50"] = enriched["Close"].rolling(50).mean()
     enriched["SMA_150"] = enriched["Close"].rolling(150).mean()
     enriched["SMA_200"] = enriched["Close"].rolling(200).mean()
+    enriched["CLOSE_5D_AGO"] = enriched["Close"].shift(5)
+    enriched["CLOSE_20D_AGO"] = enriched["Close"].shift(20)
     enriched["CLOSE_126D_AGO"] = enriched["Close"].shift(126)
     enriched["SMA_200_PREV_22"] = enriched["SMA_200"].shift(22)
     enriched["VOL_50"] = enriched["Volume"].rolling(50).mean()
@@ -153,6 +155,11 @@ def _payload_from_row(*, ticker: str, market: str, date: pd.Timestamp, row: pd.S
     candle_range = max(0.01, high - low)
     close_strength = (close - low) / candle_range
     upper_wick_pct = (high - close) / candle_range * 100
+    stop_distance_pct = abs(close - stop) / close * 100 if close > 0 else None
+    dist_sma20_pct = (close / float(row["SMA_20"]) - 1) * 100 if float(row["SMA_20"]) else None
+    dist_sma50_pct = (close / float(row["SMA_50"]) - 1) * 100 if float(row["SMA_50"]) else None
+    prior_5d_return = _safe_return(close, row.get("CLOSE_5D_AGO"))
+    prior_20d_return = _safe_return(close, row.get("CLOSE_20D_AGO"))
     daily_return_126 = _safe_return(close, row.get("CLOSE_126D_AGO"))
     rs_proxy = _rs_proxy(daily_return_126)
     sb_z_score = 0.0
@@ -185,7 +192,13 @@ def _payload_from_row(*, ticker: str, market: str, date: pd.Timestamp, row: pd.S
         "daily_above_200ma": True,
         "daily_setup_stage": "COMPLETE",
         "daily_volume_trend": "ACCUMULATION",
+        "daily_volume_ratio": round(volume_ratio, 2),
         "daily_dist_from_high": round((close / float(row["HIGH_52W"]) - 1) * 100, 2),
+        "dist_sma20_pct": round(dist_sma20_pct, 2) if dist_sma20_pct is not None else None,
+        "dist_sma50_pct": round(dist_sma50_pct, 2) if dist_sma50_pct is not None else None,
+        "prior_5d_return_pct": round(prior_5d_return * 100, 2) if prior_5d_return is not None else None,
+        "prior_20d_return_pct": round(prior_20d_return * 100, 2) if prior_20d_return is not None else None,
+        "stop_distance_pct": round(stop_distance_pct, 2) if stop_distance_pct is not None else None,
         "candle_strength": round(close_strength * 100),
         "upper_wick_pct": round(upper_wick_pct, 2),
         "atr_dot": sb_z_score > 2.5,

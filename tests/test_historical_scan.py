@@ -13,6 +13,8 @@ def test_scan_rule_signal_outcomes_uses_actual_signal_dates_only():
     assert outcomes[0].master_score is not None
     assert outcomes[0].rating in {"ENTRY", "LEADER"}
     assert outcomes[0].payload["type"] == "규칙형 돌파 진입"
+    assert outcomes[0].payload["daily_volume_ratio"] > 1
+    assert outcomes[0].payload["prior_20d_return_pct"] is not None
     assert outcomes[0].returns["5d"] is not None
 
 
