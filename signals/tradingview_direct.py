@@ -34,6 +34,8 @@ class TradingViewExcludedSignal:
     exit_label: str
     entry_bar_index: int
     exit_bar_index: int
+    risk_flags: list[str]
+    score_penalty_hint: int
 
 
 BUY_LABEL_KEYWORDS = (
@@ -199,16 +201,26 @@ def map_lazy_alpha_labels_to_exclusions(
         if not later_exits:
             continue
         exit_bar_index, exit_label = min(later_exits, key=lambda item: item[0])
+        text = str(selected_label.get("text") or "")
+        entry = _float_or_none(bars[selected_bar_index].get("close"))
+        context = _context_metrics(bars, selected_bar_index, entry or 0)
+        risk_flags = classify_pre_signal_risks(
+            label=text,
+            context=context,
+            duplicate_count=len(cluster),
+        )
         excluded.append(
             TradingViewExcludedSignal(
                 symbol=symbol,
                 market=market,
                 signal_date=_date_from_bar(bars[selected_bar_index]),
-                label=str(selected_label.get("text") or ""),
+                label=text,
                 exit_date=_date_from_bar(bars[exit_bar_index]) if exit_bar_index < len(bars) else None,
                 exit_label=str(exit_label.get("text") or ""),
                 entry_bar_index=selected_bar_index,
                 exit_bar_index=exit_bar_index,
+                risk_flags=risk_flags,
+                score_penalty_hint=score_penalty_hint(risk_flags),
             )
         )
     return excluded

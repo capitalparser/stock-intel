@@ -97,6 +97,8 @@ def test_format_scan_report_includes_exclusion_reason_cards():
         exit_label="📉 모멘텀 SELL\nENTRY: 9000",
         entry_bar_index=297,
         exit_bar_index=409,
+        risk_flags=[],
+        score_penalty_hint=0,
     )
 
     text = format_scan_report(
@@ -124,6 +126,8 @@ def test_format_telegram_exclusion_cards_uses_korean_names():
         exit_label="📉 모멘텀 SELL",
         entry_bar_index=297,
         exit_bar_index=309,
+        risk_flags=[],
+        score_penalty_hint=0,
     )
 
     text = "\n".join(

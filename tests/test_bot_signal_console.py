@@ -98,6 +98,8 @@ def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
         exit_label="📉 모멘텀 SELL\nENTRY: 9000",
         entry_bar_index=297,
         exit_bar_index=409,
+        risk_flags=[],
+        score_penalty_hint=0,
     )
 
     monkeypatch.setattr(
@@ -109,6 +111,7 @@ def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     text = bot.render_lazy_alpha_status_for_symbol("KRX:300080")
 
     assert "판정: 매수 후보 아님" in text
+    assert "기술점수: 100점" in text
     assert "차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 

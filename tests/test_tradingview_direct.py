@@ -171,6 +171,8 @@ def test_map_lazy_alpha_labels_reports_exclusion_after_later_momentum_sell_label
     assert exclusions[0].symbol == "KRX:300080"
     assert exclusions[0].label == "💰 진입"
     assert exclusions[0].exit_label == "모멘텀 SELL"
+    assert exclusions[0].score_penalty_hint == 0
+    assert exclusions[0].risk_flags == []
 
 
 def test_map_lazy_alpha_labels_resets_entry_after_exit_label_beyond_loaded_bars():

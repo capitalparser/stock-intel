@@ -214,9 +214,11 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
     elif result.exclusions:
         item = sorted(result.exclusions, key=lambda row: row.exit_bar_index, reverse=True)[0]
         exit_date = item.exit_date or "차트 우측 최신 라벨"
+        score = max(0, 100 - item.score_penalty_hint)
         lines.extend(
             [
                 "판정: 매수 후보 아님",
+                f"기술점수: {score}점",
                 f"사유: {exit_date} · {_compact_label(item.exit_label)}",
                 f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
             ]
