@@ -192,6 +192,8 @@ node src/cli/index.js watchlist create "Intel Alert Candidates" --file list.txt
 
 이 CLI 작업은 TradingView Desktop이 로그인된 상태로 `--remote-debugging-port=9222`에 떠 있어야 합니다.
 
+테스트 fixture `tests/fixtures/tradingview_watchlist_kr_actual.json`은 TradingView custom watchlist `국장`에서 2026-05-25에 읽은 실제 관심 심볼을 기준으로 합니다. 6자리 `KRX:` 종목은 감사인 자동조회 대상으로 정규화하고, `KRX:S0X1!`처럼 상장사 종목코드가 아닌 항목은 독립성 수동 확인으로 처리합니다.
+
 ## Production Direction
 
 개인 실사용은 작은 VPS 1대에 올리는 구성이 가장 단순합니다.

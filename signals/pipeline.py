@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from signals.filtering import decide_signal_filter
 from signals.formatting import format_signal_alert
 from signals.independence import decide_independence
-from signals.market import classify_market
+from signals.market import classify_market, supports_audit_lookup, ticker_for_lookup
 from signals.payload import TradingViewSignal
 from signals.storage import SignalStore
 
@@ -41,7 +41,13 @@ class SignalPipeline:
         market = classify_market(signal.ticker, signal.exchange)
         filter_decision = decide_signal_filter(signal)
 
-        audit = self._audit_lookup(signal.ticker) if market.code == "KR" else {}
+        lookup_ticker = ticker_for_lookup(signal.ticker, market.code)
+        if supports_audit_lookup(signal.ticker, market.code):
+            audit = self._audit_lookup(lookup_ticker)
+        elif market.code == "KR":
+            audit = {"error": "상장사 6자리 종목코드가 아니어서 DART 감사인 자동조회 제외"}
+        else:
+            audit = {}
         independence = decide_independence(market, audit)
 
         telegram_sent = False

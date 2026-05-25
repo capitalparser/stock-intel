@@ -13,8 +13,11 @@ class Market:
 
 def classify_market(ticker: str, exchange: str) -> Market:
     ex = (exchange or "").upper()
-    if ex in {"KRX", "KOSPI", "KOSDAQ", "KONEX"} or (
-        ticker.isdigit() and len(ticker) == 6
+    normalized_ticker = ticker_for_lookup(ticker, "KR")
+    if (
+        ex in {"KRX", "KOSPI", "KOSDAQ", "KONEX"}
+        or ticker.upper().startswith(("KRX:", "KOSPI:", "KOSDAQ:", "KONEX:"))
+        or (normalized_ticker.isdigit() and len(normalized_ticker) == 6)
     ):
         return Market("KR", "한국")
     if ex in {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC"}:
@@ -23,3 +26,13 @@ def classify_market(ticker: str, exchange: str) -> Market:
         return Market("JP", "일본")
     return Market("UNKNOWN", "미분류")
 
+
+def ticker_for_lookup(ticker: str, market_code: str) -> str:
+    if market_code == "KR":
+        return ticker.split(":", 1)[1] if ":" in ticker else ticker
+    return ticker
+
+
+def supports_audit_lookup(ticker: str, market_code: str) -> bool:
+    lookup_ticker = ticker_for_lookup(ticker, market_code)
+    return market_code == "KR" and lookup_ticker.isdigit() and len(lookup_ticker) == 6
