@@ -87,13 +87,13 @@ _KST = ZoneInfo("Asia/Seoul")
 HELP_TEXT = (
     "종목명을 입력하면 수급현황, 공매도, 기술적 지표, 펀더멘탈, 감사법인을 보여드립니다.\n"
     "DM: 삼성전자 / SK하이닉스 / NAVER\n"
-    "그룹: /s 삼성전자 또는 /stock 삼성전자\n\n"
-    "/signals — Lazy Alpha 버튼 콘솔\n"
+    "그룹: /종목 삼성전자 또는 /s 삼성전자\n\n"
+    "/신호 — Lazy Alpha 버튼 콘솔\n"
+    "/신호 kr 8h — 최근 국장 매수 후보\n"
+    "/종목 005930 — 특정 종목 Lazy Alpha 판단\n"
+    "/조회 삼성전자 — 종목 리서치\n"
     "/universe — TradingView watchlist universe 요약\n"
     "/sync_universe — TradingView watchlist universe 동기화\n"
-    "/buy kr 8h — 최근 국장 매수 후보\n"
-    "/sell 24h — 최근 매도 후보\n"
-    "/signal 005930 — 특정 종목 지표 판단\n"
     "/feed — 최근 BUY 시그널 목록\n"
     "/feed 50 — 최근 50건"
 )
@@ -404,6 +404,41 @@ async def handle_signal_detail(update: Update, context) -> None:
     await update.message.reply_text(text)
 
 
+def _strip_korean_slash_command(text: str) -> tuple[str, list[str]]:
+    parts = text.strip().split()
+    command = parts[0].split("@", 1)[0].lstrip("/") if parts else ""
+    return command, parts[1:]
+
+
+async def handle_korean_signal_command(update: Update, context) -> None:
+    """/신호 텍스트 트리거. Telegram command menu 제약과 무관하게 직접 입력을 지원한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    text, keyboard = await asyncio.to_thread(render_signal_console, args or ["buy"])
+    await update.message.reply_text(text, reply_markup=keyboard)
+
+
+async def handle_korean_stock_command(update: Update, context) -> None:
+    """/종목 텍스트 트리거. Lazy Alpha 판단을 우선 보여주고, 저장값이 없으면 일반 종목 조회로 fallback."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    query = " ".join(args).strip()
+    if not query:
+        await update.message.reply_text("조회할 종목명이나 종목코드를 같이 보내주세요.\n예) /종목 005930")
+        return
+
+    signal_text = await asyncio.to_thread(render_signal_detail, query)
+    if "저장된 Lazy Alpha 시그널이 없습니다" not in signal_text:
+        await update.message.reply_text(signal_text)
+        return
+
+    await _lookup_and_reply(update, query)
+
+
 async def handle_signal_console_callback(update: Update, context) -> None:
     """Lazy Alpha console inline keyboard callback."""
     query = update.callback_query
@@ -555,6 +590,18 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/조회(?:@\S+)?(?:\s+.*)?$"),
             handle_korean_lookup_text,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/신호(?:@\S+)?(?:\s+.*)?$"),
+            handle_korean_signal_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/종목(?:@\S+)?(?:\s+.*)?$"),
+            handle_korean_stock_command,
         )
     )
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

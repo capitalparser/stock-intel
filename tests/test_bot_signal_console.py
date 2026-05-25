@@ -71,6 +71,32 @@ def test_signal_text_shortcuts_open_signal_console():
     assert bot.is_signal_console_text("삼성전자") is False
 
 
+def test_strip_korean_slash_command_handles_args_and_bot_suffix():
+    command, args = bot._strip_korean_slash_command("/신호@stock_intel_bot kr 8h")
+
+    assert command == "신호"
+    assert args == ["kr", "8h"]
+
+
+def test_render_korean_signal_command_defaults_to_buy_console(tmp_path, monkeypatch):
+    db_path = tmp_path / "signals.db"
+    store = SignalStore(db_path)
+    store.upsert_active_signal(
+        signal=load_signal("tradingview_v6_2_buy_samsung.json"),
+        market="KR",
+        independence_status="CLEAR",
+        activated_at=1000,
+        ttl_seconds=8 * 3600,
+    )
+    monkeypatch.setenv("STATE_DB_PATH", str(db_path))
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "missing_universe.json"))
+
+    text, _keyboard = bot.render_signal_console(["buy"], now=1000)
+
+    assert "탭: 매수" in text
+    assert "삼성전자" in text
+
+
 def test_render_universe_summary_uses_snapshot_path(tmp_path, monkeypatch):
     path = tmp_path / "universe.json"
     snapshot = build_universe_snapshot(
