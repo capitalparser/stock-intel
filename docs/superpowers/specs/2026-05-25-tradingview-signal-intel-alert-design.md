@@ -28,12 +28,36 @@ The project must not silently hide blocked signals. The blocked state is itself 
 
 ## Non-Goals
 
-- No automatic trade execution.
+- No automatic trade execution in v1. This is a scope boundary for the alert
+  product, not a strategic prohibition. A future auto-trading bot can be treated
+  as a related project that consumes the same validated webhook, signal-quality,
+  and independence-decision outputs through an explicit interface.
 - No silent buy recommendation. Messages describe signal state and independence status.
 - No automatic US/Japan auditor lookup in v1.
 - No attempt to inspect private-indicator internals. The webhook JSON is the contract.
 - No merge of 03_tradingview_companion into 04.
 - No position lifecycle engine for sell, invalidation, or take-profit signals in v1.
+
+## Future Auto-Trading Relationship
+
+The v1 alert bot should preserve a clean boundary so a later auto-trading system
+can be added without rewriting the signal intake layer.
+
+Future auto-trading work should be a separate related project or explicit module
+with its own risk controls, broker adapter, order-state store, kill switch,
+position sizing policy, compliance review, and paper-trading verification.
+
+The shared contract should be:
+
+```text
+validated TradingView payload
+-> signal quality decision
+-> independence decision
+-> machine-readable alert event
+```
+
+Only events that pass future trading-specific gates should ever reach a broker
+adapter. v1 Telegram messages remain human-in-the-loop alerts.
 
 ## Product Boundary
 
