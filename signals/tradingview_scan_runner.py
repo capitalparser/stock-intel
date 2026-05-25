@@ -12,6 +12,7 @@ from signals.tradingview_direct import (
     TradingViewLabelOutcome,
     map_lazy_alpha_labels_to_outcomes,
 )
+from utils.ticker import load_ticker_cache
 
 SUPPORTED_PREFIXES = ("NASDAQ:", "NYSE:", "AMEX:", "KRX:", "TSE:", "TYO:", "JPX:")
 US_PREFIXES = ("NASDAQ:", "NYSE:", "AMEX:")
@@ -146,13 +147,18 @@ def format_scan_report(
     return "\n".join(lines)
 
 
-def format_telegram_outcome_cards(outcomes: list[TradingViewLabelOutcome]) -> list[str]:
+def format_telegram_outcome_cards(
+    outcomes: list[TradingViewLabelOutcome],
+    *,
+    ticker_cache: list[dict] | None = None,
+) -> list[str]:
     if not outcomes:
         return [
             "현재 활성 매수 라벨 없음",
             "진입 이후 손절/청산/이탈 라벨이 나온 경우에는 활성 후보에서 제외했습니다.",
         ]
 
+    cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
     lines = [f"활성 매수 후보: {len(outcomes)}건"]
     for index, item in enumerate(outcomes, start=1):
         risk = "없음" if not item.risk_flags else ", ".join(item.risk_flags)
@@ -160,7 +166,7 @@ def format_telegram_outcome_cards(outcomes: list[TradingViewLabelOutcome]) -> li
         lines.extend(
             [
                 "",
-                f"{index}. {item.symbol}",
+                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
                 f"   일자: {item.signal_date} · 상태: {status}",
                 f"   라벨: {item.label}",
                 f"   가격: {_fmt_price(item.entry_price)} · 중복: {item.duplicate_count}",
@@ -174,6 +180,24 @@ def format_telegram_outcome_cards(outcomes: list[TradingViewLabelOutcome]) -> li
         if item.failure_class:
             lines.append(f"   실패분류: {item.failure_class}")
     return lines
+
+
+def symbol_display_name(symbol: str, *, ticker_cache: list[dict] | None = None) -> str:
+    if not symbol.startswith("KRX:"):
+        return symbol
+    code = symbol.split(":", 1)[1]
+    cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
+    for item in cache:
+        if str(item.get("code")) == code:
+            return f"{symbol} · {item.get('name')}"
+    return symbol
+
+
+def _load_ticker_cache_safely() -> list[dict]:
+    try:
+        return load_ticker_cache()
+    except Exception:
+        return []
 
 
 def _fmt_price(value: float) -> str:

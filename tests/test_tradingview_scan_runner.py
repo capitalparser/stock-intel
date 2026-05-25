@@ -3,8 +3,10 @@ from pathlib import Path
 
 from signals.tradingview_scan_runner import (
     format_scan_report,
+    format_telegram_outcome_cards,
     market_for_symbol,
     normalize_scan_symbol,
+    symbol_display_name,
     symbols_from_universe,
 )
 from signals.tradingview_direct import TradingViewLabelOutcome
@@ -79,3 +81,36 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "1. NASDAQ:AAPL" in text
     assert "라벨: 💰 진입" in text
     assert "수익률: 5일 +3.35%" in text
+
+
+def test_symbol_display_name_adds_korean_company_name_for_krx_symbol():
+    cache = [{"code": "103590", "name": "일진전기", "market": "KOSPI"}]
+
+    assert symbol_display_name("KRX:103590", ticker_cache=cache) == "KRX:103590 · 일진전기"
+    assert symbol_display_name("NASDAQ:AAPL", ticker_cache=cache) == "NASDAQ:AAPL"
+
+
+def test_telegram_cards_include_korean_company_name_for_krx_symbol():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-04-22",
+        first_signal_date="2026-04-22",
+        last_signal_date="2026-04-22",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": 36.69, "10d": 64.69, "20d": 23.77},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = "\n".join(
+        format_telegram_outcome_cards(
+            [outcome],
+            ticker_cache=[{"code": "103590", "name": "일진전기", "market": "KOSPI"}],
+        )
+    )
+
+    assert "1. KRX:103590 · 일진전기" in text
