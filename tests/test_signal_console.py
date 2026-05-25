@@ -73,12 +73,54 @@ def test_store_latest_for_ticker_matches_prefixed_and_plain_kr_tickers(tmp_path)
     assert row.action == "SELL"
 
 
+def test_store_active_signal_roundtrip_and_close(tmp_path):
+    store = SignalStore(tmp_path / "signals.db")
+    signal = load_signal("tradingview_v6_2_buy_samsung.json", ticker="KRX:005930")
+    store.upsert_active_signal(
+        signal=signal,
+        market="KR",
+        independence_status="CLEAR",
+        activated_at=100,
+        ttl_seconds=8 * 3600,
+    )
+
+    active = store.active_signals(now=200)
+
+    assert len(active) == 1
+    assert active[0].ticker == "KRX:005930"
+    assert active[0].base_type == "💰 정석 진입"
+    assert active[0].expires_at == 100 + 8 * 3600
+
+    store.close_active_signal("005930", closed_at=300)
+
+    assert store.active_signals(now=400) == []
+
+
 def test_parse_console_args_defaults_to_buy_all_8h():
     state = parse_console_args([])
 
     assert state.tab == "BUY"
     assert state.market == "ALL"
     assert state.hours == 8
+    assert state.view == "ACTIVE"
+
+
+def test_parse_console_args_keeps_buy_kr_8h_state():
+    state = parse_console_args(["buy", "kr", "8h"])
+
+    assert state.tab == "BUY"
+    assert state.market == "KR"
+    assert state.hours == 8
+    assert state.view == "ACTIVE"
+
+
+def test_parse_console_args_supports_recent_event_view():
+    state = parse_console_args(["recent", "sell", "jp", "24h"])
+
+    assert state.view == "RECENT"
+    assert state.tab == "SELL"
+    assert state.market == "JP"
+    assert state.hours == 24
 
 
 def test_format_console_filters_recent_buy_kr_rows(tmp_path):
@@ -102,7 +144,7 @@ def test_format_console_filters_recent_buy_kr_rows(tmp_path):
 
     text = format_console(
         rows=store.recent_since(0),
-        state=ConsoleState(tab="BUY", market="KR", hours=8),
+        state=ConsoleState(view="RECENT", tab="BUY", market="KR", hours=8),
         now=1000,
     )
 
@@ -110,6 +152,27 @@ def test_format_console_filters_recent_buy_kr_rows(tmp_path):
     assert "매수" in text
     assert "삼성전자" in text
     assert "Apple" not in text
+
+
+def test_format_console_shows_active_signal_state(tmp_path):
+    store = SignalStore(tmp_path / "signals.db")
+    store.upsert_active_signal(
+        signal=load_signal("tradingview_v6_2_buy_samsung.json", name="삼성전자"),
+        market="KR",
+        independence_status="CLEAR",
+        activated_at=1000,
+        ttl_seconds=8 * 3600,
+    )
+
+    text = format_console(
+        rows=store.active_signals(now=1200),
+        state=ConsoleState(view="ACTIVE", tab="BUY", market="KR", hours=8),
+        now=1200,
+    )
+
+    assert "보기: 현재 활성" in text
+    assert "active 3m" in text
+    assert "삼성전자" in text
 
 
 def test_format_signal_detail_shows_latest_indicator_judgment(tmp_path):
@@ -142,6 +205,7 @@ def test_build_console_keyboard_uses_tab_like_callback_payloads():
         for button in row
         if button.callback_data
     ]
-    assert "sig:tab=SELL;market=ALL;hours=8" in callbacks
-    assert "sig:tab=BUY;market=KR;hours=8" in callbacks
-    assert "sig:tab=BUY;market=ALL;hours=24" in callbacks
+    assert "sig:view=ACTIVE;tab=SELL;market=ALL;hours=8" in callbacks
+    assert "sig:view=ACTIVE;tab=BUY;market=KR;hours=8" in callbacks
+    assert "sig:view=ACTIVE;tab=BUY;market=ALL;hours=24" in callbacks
+    assert "sig:view=RECENT;tab=BUY;market=ALL;hours=8" in callbacks

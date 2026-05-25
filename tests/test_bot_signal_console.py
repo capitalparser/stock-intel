@@ -17,13 +17,12 @@ def load_signal(name: str) -> TradingViewSignal:
 def test_render_signal_console_uses_state_db_path_and_args(tmp_path, monkeypatch):
     db_path = tmp_path / "signals.db"
     store = SignalStore(db_path)
-    store.put_event(
+    store.upsert_active_signal(
         signal=load_signal("tradingview_v6_2_buy_samsung.json"),
         market="KR",
         independence_status="CLEAR",
-        filter_status="ALLOWED",
-        telegram_sent=True,
-        received_at=1000,
+        activated_at=1000,
+        ttl_seconds=8 * 3600,
     )
     monkeypatch.setenv("STATE_DB_PATH", str(db_path))
 
@@ -31,7 +30,7 @@ def test_render_signal_console_uses_state_db_path_and_args(tmp_path, monkeypatch
 
     assert "Lazy Alpha Signal Console" in text
     assert "삼성전자" in text
-    assert keyboard.inline_keyboard[0][1].callback_data == "sig:tab=SELL;market=KR;hours=8"
+    assert keyboard.inline_keyboard[1][1].callback_data == "sig:view=ACTIVE;tab=SELL;market=KR;hours=8"
 
 
 def test_render_signal_detail_uses_latest_matching_ticker(tmp_path, monkeypatch):
@@ -60,3 +59,10 @@ def test_help_text_shortcuts_do_not_fall_through_to_stock_lookup():
     assert bot.is_help_text("도움말") is True
     assert bot.is_help_text("메뉴") is True
     assert bot.is_help_text("삼성전자") is False
+
+
+def test_signal_text_shortcuts_open_signal_console():
+    assert bot.is_signal_console_text("시그널") is True
+    assert bot.is_signal_console_text("신호") is True
+    assert bot.is_signal_console_text("signals") is True
+    assert bot.is_signal_console_text("삼성전자") is False

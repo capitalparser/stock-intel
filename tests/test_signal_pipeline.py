@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from signals.pipeline import SignalPipeline
+from signals.payload import TradingViewSignal
 from signals.storage import SignalStore
 
 
@@ -78,3 +79,46 @@ async def test_pipeline_stores_filtered_sell_without_telegram(tmp_path):
     assert sent == []
     assert store.recent(limit=1)[0].filter_status == "FILTERED"
 
+
+@pytest.mark.asyncio
+async def test_pipeline_allowed_buy_creates_active_signal_state(tmp_path):
+    async def sender(text: str) -> bool:
+        return True
+
+    store = SignalStore(tmp_path / "signals.db")
+    pipeline = SignalPipeline(
+        store=store,
+        audit_lookup=lambda ticker: {"current_firm": "한영회계법인"},
+        send_message=sender,
+    )
+
+    await pipeline.handle_payload(load_payload("tradingview_v6_2_buy_samsung.json"))
+
+    active = store.active_signals()
+    assert len(active) == 1
+    assert active[0].ticker == "005930"
+    assert active[0].independence_status == "CLEAR"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_sell_closes_active_signal_state(tmp_path):
+    async def sender(text: str) -> bool:
+        return True
+
+    store = SignalStore(tmp_path / "signals.db")
+    store.upsert_active_signal(
+        signal=TradingViewSignal.model_validate(load_payload("tradingview_v6_2_buy_samsung.json")),
+        market="KR",
+        independence_status="CLEAR",
+        activated_at=100,
+        ttl_seconds=8 * 3600,
+    )
+    pipeline = SignalPipeline(
+        store=store,
+        audit_lookup=lambda ticker: {"current_firm": "한영회계법인"},
+        send_message=sender,
+    )
+
+    await pipeline.handle_payload(load_payload("tradingview_v6_2_sell_samsung.json"))
+
+    assert store.active_signals() == []

@@ -62,6 +62,14 @@ class SignalPipeline:
             filter_status=filter_decision.status,
             telegram_sent=telegram_sent,
         )
+        if filter_decision.allowed:
+            self._store.upsert_active_signal(
+                signal=signal,
+                market=market.code,
+                independence_status=independence.status,
+            )
+        elif signal.action == "SELL":
+            self._store.close_active_signal(lookup_ticker)
         return PipelineResult(
             ticker=signal.ticker,
             filter_status=filter_decision.status,

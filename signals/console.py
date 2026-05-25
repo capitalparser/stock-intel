@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from signals.storage import SignalEventRow
+from signals.storage import ActiveSignalRow, SignalEventRow
 
 
 TAB_LABELS = {
@@ -27,18 +27,24 @@ MARKET_LABELS = {
 
 @dataclass(frozen=True)
 class ConsoleState:
+    view: str = "ACTIVE"
     tab: str = "BUY"
     market: str = "ALL"
     hours: int = 8
 
 
 def parse_console_args(args: list[str]) -> ConsoleState:
+    view = "ACTIVE"
     tab = "BUY"
     market = "ALL"
     hours = 8
     for raw in args:
         value = raw.lower()
-        if value in {"buy", "매수"}:
+        if value in {"active", "현재", "활성"}:
+            view = "ACTIVE"
+        elif value in {"recent", "event", "events", "최근"}:
+            view = "RECENT"
+        elif value in {"buy", "매수"}:
             tab = "BUY"
         elif value in {"sell", "매도"}:
             tab = "SELL"
@@ -52,7 +58,7 @@ def parse_console_args(args: list[str]) -> ConsoleState:
             market = "JP"
         elif value.endswith("h") and value[:-1].isdigit():
             hours = max(1, min(int(value[:-1]), 72))
-    return ConsoleState(tab=tab, market=market, hours=hours)
+    return ConsoleState(view=view, tab=tab, market=market, hours=hours)
 
 
 def parse_console_callback(data: str) -> ConsoleState:
@@ -60,6 +66,7 @@ def parse_console_callback(data: str) -> ConsoleState:
         data = data.removeprefix("sig:")
     parts = dict(part.split("=", 1) for part in data.split(";") if "=" in part)
     return ConsoleState(
+        view=parts.get("view", "ACTIVE"),
         tab=parts.get("tab", "BUY"),
         market=parts.get("market", "ALL"),
         hours=int(parts.get("hours", "8")),
@@ -68,7 +75,7 @@ def parse_console_callback(data: str) -> ConsoleState:
 
 def format_console(
     *,
-    rows: list[SignalEventRow],
+    rows: list[SignalEventRow] | list[ActiveSignalRow],
     state: ConsoleState,
     now: int | None = None,
     limit: int = 12,
@@ -78,14 +85,14 @@ def format_console(
     filtered = [
         row
         for row in rows
-        if row.received_at >= since
+        if _row_timestamp(row) >= since
         and _matches_tab(row, state.tab)
         and (state.market == "ALL" or row.market == state.market)
     ][:limit]
 
     lines = [
         "📡 Lazy Alpha Signal Console",
-        f"기준: 최근 {state.hours}시간 · 탭: {TAB_LABELS.get(state.tab, state.tab)} · 시장: {MARKET_LABELS.get(state.market, state.market)}",
+        f"보기: {_view_label(state.view)} · 기준: 최근 {state.hours}시간 · 탭: {TAB_LABELS.get(state.tab, state.tab)} · 시장: {MARKET_LABELS.get(state.market, state.market)}",
         "",
     ]
     if not filtered:
@@ -97,9 +104,11 @@ def format_console(
         name = payload.get("name") or row.ticker
         score = payload.get("score", "-")
         conviction = payload.get("conviction", "-")
+        active_age = _active_age(row, current)
+        active_suffix = f" · active {active_age}" if active_age else ""
         lines.append(
             f"{idx}. {name} ({row.ticker}) · {row.market} · {row.action}\n"
-            f"   {row.base_type} · Score {score} · {conviction}등급 · 독립성 {row.independence_status}"
+            f"   {row.base_type} · Score {score} · {conviction}등급 · 독립성 {row.independence_status}{active_suffix}"
         )
     return "\n".join(lines)
 
@@ -132,6 +141,10 @@ def build_console_keyboard(state: ConsoleState) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
+                _button("현재 활성", state, view="ACTIVE"),
+                _button("최근 발생", state, view="RECENT"),
+            ],
+            [
                 _button("매수", state, tab="BUY"),
                 _button("매도", state, tab="SELL"),
                 _button("확인필요", state, tab="REVIEW"),
@@ -156,11 +169,13 @@ def _button(
     label: str,
     state: ConsoleState,
     *,
+    view: str | None = None,
     tab: str | None = None,
     market: str | None = None,
     hours: int | None = None,
 ) -> InlineKeyboardButton:
     next_state = ConsoleState(
+        view=view or state.view,
         tab=tab or state.tab,
         market=market or state.market,
         hours=hours or state.hours,
@@ -169,11 +184,13 @@ def _button(
 
 
 def _callback_data(state: ConsoleState) -> str:
-    return f"sig:tab={state.tab};market={state.market};hours={state.hours}"
+    return f"sig:view={state.view};tab={state.tab};market={state.market};hours={state.hours}"
 
 
-def _matches_tab(row: SignalEventRow, tab: str) -> bool:
+def _matches_tab(row: SignalEventRow | ActiveSignalRow, tab: str) -> bool:
     if tab == "BUY":
+        if isinstance(row, ActiveSignalRow):
+            return row.action == "BUY"
         return row.action == "BUY" and row.filter_status == "ALLOWED"
     if tab == "SELL":
         return row.action == "SELL"
@@ -187,3 +204,20 @@ def _payload(row: SignalEventRow) -> dict:
         return json.loads(row.payload_json)
     except json.JSONDecodeError:
         return {}
+
+
+def _row_timestamp(row: SignalEventRow | ActiveSignalRow) -> int:
+    return row.received_at if isinstance(row, SignalEventRow) else row.updated_at
+
+
+def _active_age(row: SignalEventRow | ActiveSignalRow, now: int) -> str:
+    if not isinstance(row, ActiveSignalRow):
+        return ""
+    minutes = max(0, (now - row.activated_at) // 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    return f"{minutes // 60}h {minutes % 60}m"
+
+
+def _view_label(view: str) -> str:
+    return "현재 활성" if view == "ACTIVE" else "최근 발생"

@@ -89,6 +89,7 @@ HELP_TEXT = (
     "/feed 50 — 최근 50건"
 )
 _HELP_TEXT_SHORTCUTS = {"기능", "도움말", "메뉴", "help"}
+_SIGNAL_CONSOLE_TEXT_SHORTCUTS = {"시그널", "신호", "signals", "signal"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -203,7 +204,12 @@ def _signal_store() -> SignalStore:
 def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
     current = int(now if now is not None else time.time())
     state = parse_console_args(args)
-    rows = _signal_store().recent_since(current - state.hours * 3600)
+    store = _signal_store()
+    rows = (
+        store.active_signals(now=current)
+        if state.view == "ACTIVE"
+        else store.recent_since(current - state.hours * 3600)
+    )
     return (
         format_console(rows=rows, state=state, now=current),
         build_console_keyboard(state),
@@ -213,7 +219,12 @@ def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[s
 def render_signal_console_callback(data: str, *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
     current = int(now if now is not None else time.time())
     state = parse_console_callback(data)
-    rows = _signal_store().recent_since(current - state.hours * 3600)
+    store = _signal_store()
+    rows = (
+        store.active_signals(now=current)
+        if state.view == "ACTIVE"
+        else store.recent_since(current - state.hours * 3600)
+    )
     return (
         format_console(rows=rows, state=state, now=current),
         build_console_keyboard(state),
@@ -227,6 +238,10 @@ def render_signal_detail(ticker: str, *, now: int | None = None) -> str:
 
 def is_help_text(text: str) -> bool:
     return text.strip().lower() in _HELP_TEXT_SHORTCUTS
+
+
+def is_signal_console_text(text: str) -> bool:
+    return text.strip().lower() in _SIGNAL_CONSOLE_TEXT_SHORTCUTS
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +415,10 @@ async def handle_text(update: Update, context) -> None:
     query = update.message.text.strip()
     if is_help_text(query):
         await update.message.reply_text(HELP_TEXT)
+        return
+    if is_signal_console_text(query):
+        text, keyboard = await asyncio.to_thread(render_signal_console, [])
+        await update.message.reply_text(text, reply_markup=keyboard)
         return
     await _lookup_and_reply(update, query)
 

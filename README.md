@@ -42,7 +42,7 @@ Telegram에서 종목명만 보내면 국내 주식 투자 판단에 필요한 �
   - `/signals` 버튼형 Lazy Alpha 콘솔
   - `/buy`, `/sell` 빠른 후보 조회
   - `/signal <ticker>` 특정 종목의 최신 지표 판단 조회
-  - 기본 기준은 최근 8시간 rolling window
+  - 기본 화면은 현재 활성 시그널, `recent` 옵션은 최근 발생 이벤트
 
 ## Example
 
@@ -201,18 +201,22 @@ node src/cli/index.js watchlist create "Intel Alert Candidates" --file list.txt
 
 ## Telegram Signal Console
 
-Telegram에서 저장된 Lazy Alpha webhook ledger를 탐색할 수 있습니다. v1은 TradingView webhook으로 들어온 최근 이벤트 기준이며, TradingView 차트의 현재 상태를 실시간으로 다시 계산하지 않습니다.
+Telegram에서 저장된 Lazy Alpha webhook ledger와 현재 활성 시그널 상태를 탐색할 수 있습니다. v1은 TradingView webhook으로 들어온 이벤트를 기준으로 active state를 갱신하며, TradingView 차트의 현재 상태를 실시간으로 다시 계산하지 않습니다.
 
 ```text
 /signals
 /buy
 /buy kr 8h
 /sell 24h
+/signals recent
 /signals review us 24h
 /signal 005930
+시그널
 ```
 
-`/signals`는 버튼형 콘솔을 띄웁니다. 버튼은 같은 메시지를 갱신하며, 탭은 `매수`, `매도`, `확인필요`, 시장은 `전체`, `국장`, `미국`, `일본`, 기간은 `4h`, `8h`, `24h`를 지원합니다.
+`/signals`는 버튼형 콘솔을 띄웁니다. 기본 보기는 `현재 활성`입니다. `BUY` 계열 webhook이 들어오면 active 상태가 생성 또는 갱신되고, `SELL` webhook이 들어오면 해당 종목의 active 상태가 종료됩니다. 버튼은 같은 메시지를 갱신하며, 보기 전환은 `현재 활성`/`최근 발생`, 탭은 `매수`, `매도`, `확인필요`, 시장은 `전체`, `국장`, `미국`, `일본`, 기간은 `4h`, `8h`, `24h`를 지원합니다.
+
+`시그널`, `신호`, `signals` 같은 일반 텍스트도 종목 검색으로 보내지 않고 `/signals` 콘솔을 엽니다.
 
 ## Production Direction
 
