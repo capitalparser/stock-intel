@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -234,6 +235,14 @@ def render_sync_universe() -> str:
         output_path=_universe_snapshot_path(),
     )
     return "동기화 완료\n" + format_universe_summary(snapshot)
+
+
+def assert_port_available(host: str, port: int) -> None:
+    probe_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1.0)
+        if sock.connect_ex((probe_host, port)) == 0:
+            raise RuntimeError(f"port already in use: {host}:{port}")
 
 
 def render_signal_console(args: list[str], *, now: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
@@ -553,6 +562,7 @@ async def _run() -> None:
     tg_app.add_handler(CallbackQueryHandler(handle_callback, pattern="^ticker:"))
 
     port = int(os.getenv("PORT", "8080"))
+    assert_port_available("0.0.0.0", port)
     uv_config = uvicorn.Config(alert_app, host="0.0.0.0", port=port, log_level="info")
     uv_server = uvicorn.Server(uv_config)
 

@@ -1,4 +1,5 @@
 import json
+import socket
 from pathlib import Path
 
 import bot
@@ -142,3 +143,19 @@ def test_render_sync_universe_uses_env_paths(tmp_path, monkeypatch):
 
     assert "동기화 완료" in text
     assert "전체 심볼: 1" in text
+
+
+def test_assert_port_available_raises_for_bound_port():
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    port = sock.getsockname()[1]
+    try:
+        try:
+            bot.assert_port_available("127.0.0.1", port)
+        except RuntimeError as exc:
+            assert "already in use" in str(exc)
+        else:
+            raise AssertionError("expected RuntimeError for occupied port")
+    finally:
+        sock.close()
