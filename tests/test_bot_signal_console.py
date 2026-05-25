@@ -33,7 +33,7 @@ def test_render_signal_console_uses_state_db_path_and_args(tmp_path, monkeypatch
 
     assert "Lazy Alpha Signal Console" in text
     assert "삼성전자" in text
-    assert keyboard.inline_keyboard[1][1].callback_data == "sig:view=ACTIVE;tab=SELL;market=KR;hours=8"
+    assert keyboard.inline_keyboard[1][1].callback_data == "sig:view=ACTIVE;tab=SELL;market=KR;hours=8;sort=TIME"
 
 
 def test_render_signal_detail_uses_latest_matching_ticker(tmp_path, monkeypatch):

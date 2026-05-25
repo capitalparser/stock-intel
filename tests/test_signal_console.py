@@ -123,6 +123,13 @@ def test_parse_console_args_supports_recent_event_view():
     assert state.hours == 24
 
 
+def test_parse_console_args_supports_score_sort():
+    state = parse_console_args(["kr", "점수"])
+
+    assert state.market == "KR"
+    assert state.sort == "SCORE"
+
+
 def test_format_console_filters_recent_buy_kr_rows(tmp_path):
     store = SignalStore(tmp_path / "signals.db")
     store.put_event(
@@ -175,6 +182,49 @@ def test_format_console_shows_active_signal_state(tmp_path):
     assert "삼성전자" in text
 
 
+def test_format_console_can_sort_by_master_score(tmp_path):
+    store = SignalStore(tmp_path / "signals.db")
+    store.upsert_active_signal(
+        signal=load_signal(
+            "tradingview_v6_2_buy_samsung.json",
+            name="낮은점수",
+            score=50,
+            conviction="C",
+            daily_rs=70,
+            daily_dist_from_high=-20.0,
+            sl=69000,
+        ),
+        market="KR",
+        independence_status="CLEAR",
+        activated_at=1000,
+        ttl_seconds=8 * 3600,
+    )
+    store.upsert_active_signal(
+        signal=load_signal(
+            "tradingview_v6_2_buy_aapl.json",
+            name="높은점수",
+            score=90,
+            conviction="S",
+            daily_rs=91,
+            daily_dist_from_high=-2.0,
+            sl=188.0,
+        ),
+        market="US",
+        independence_status="CLEAR",
+        activated_at=900,
+        ttl_seconds=8 * 3600,
+    )
+
+    text = format_console(
+        rows=store.active_signals(now=1200),
+        state=ConsoleState(view="ACTIVE", tab="BUY", market="ALL", hours=8, sort="SCORE"),
+        now=1200,
+    )
+
+    assert "정렬: 점수순" in text
+    assert text.index("높은점수") < text.index("낮은점수")
+
+
 def test_format_signal_detail_shows_latest_indicator_judgment(tmp_path):
     store = SignalStore(tmp_path / "signals.db")
     store.put_event(
@@ -205,7 +255,8 @@ def test_build_console_keyboard_uses_tab_like_callback_payloads():
         for button in row
         if button.callback_data
     ]
-    assert "sig:view=ACTIVE;tab=SELL;market=ALL;hours=8" in callbacks
-    assert "sig:view=ACTIVE;tab=BUY;market=KR;hours=8" in callbacks
-    assert "sig:view=ACTIVE;tab=BUY;market=ALL;hours=24" in callbacks
-    assert "sig:view=RECENT;tab=BUY;market=ALL;hours=8" in callbacks
+    assert "sig:view=ACTIVE;tab=SELL;market=ALL;hours=8;sort=TIME" in callbacks
+    assert "sig:view=ACTIVE;tab=BUY;market=KR;hours=8;sort=TIME" in callbacks
+    assert "sig:view=ACTIVE;tab=BUY;market=ALL;hours=24;sort=TIME" in callbacks
+    assert "sig:view=RECENT;tab=BUY;market=ALL;hours=8;sort=TIME" in callbacks
+    assert "sig:view=ACTIVE;tab=BUY;market=ALL;hours=8;sort=SCORE" in callbacks
