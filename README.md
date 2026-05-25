@@ -197,6 +197,31 @@ node src/cli/index.js watchlist create "Intel Alert Candidates" --file list.txt
 
 이 CLI 작업은 TradingView Desktop이 로그인된 상태로 `--remote-debugging-port=9222`에 떠 있어야 합니다.
 
+## KR Sector Candidate Scoring
+
+국장 관심종목 후보군은 섹터별로 먼저 넓게 선별한 뒤, 펀더멘탈/수주 가시성/현금흐름/재무안정성/감사인 상태를 붙여 watch tier로 압축합니다.
+
+```bash
+set -a; source .env; set +a
+uv run python scripts/evaluate_kr_watch_candidates.py
+```
+
+출력:
+
+```text
+state/kr_watch_candidates_YYYY-MM-DD.md
+state/tradingview_kr_watch_candidates_YYYY-MM-DD.txt
+```
+
+TradingView Desktop이 CDP로 열린 상태라면 생성된 파일을 섹터 섹션이 있는 watchlist로 넣을 수 있습니다.
+
+```bash
+cd /Users/kjun/code/tradingview-mcp
+node src/cli/index.js watchlist create "KR Sector Candidates" --file /Users/kjun/vault/01_Projects/04_stock_intel/state/tradingview_kr_watch_candidates_YYYY-MM-DD.txt
+```
+
+상태는 `Core Watch`, `Watch`, `Hold for Proof`, `Exclude`를 기본으로 하며, 삼정/KPMG 등 독립성 차단 가능성이 있으면 `Blocked Core Watch`처럼 접두 상태로 표시합니다. v0의 수주/계약 가시성 점수는 섹터 thesis seed 기반이며, DART 공시검색의 `단일판매ㆍ공급계약체결` 자동 반영은 후속 보강 대상입니다.
+
 테스트 fixture `tests/fixtures/tradingview_watchlist_kr_actual.json`은 TradingView custom watchlist `국장`에서 2026-05-25에 읽은 실제 관심 심볼을 기준으로 합니다. 6자리 `KRX:` 종목은 감사인 자동조회 대상으로 정규화하고, `KRX:S0X1!`처럼 상장사 종목코드가 아닌 항목은 독립성 수동 확인으로 처리합니다.
 
 `/sync_universe`는 TradingView Desktop에 로그인된 상태의 모든 custom/color watchlist를 읽어 `state/universe_snapshot.json`으로 저장합니다. `국장`, `관심`, `예비 버블종목`, color list 등을 물리적으로 합치지 않고, 봇 내부에서 합집합 universe로 사용합니다. 국장 6자리 종목은 감사인 자동조회 대상이고, ETF/지수/코인/선물/환율 심볼은 universe에는 남기되 감사인 자동조회에서는 제외합니다.
