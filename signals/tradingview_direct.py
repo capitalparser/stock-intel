@@ -235,6 +235,30 @@ def score_penalty_hint(risk_flags: list[str]) -> int:
     return min(25, sum(penalties.get(flag, 0) for flag in set(risk_flags)))
 
 
+def classify_priority_risks(
+    *,
+    returns: dict[str, float | None],
+    context: dict[str, float | None],
+) -> list[str]:
+    flags: list[str] = []
+    ret5 = returns.get("5d")
+    ret10 = returns.get("10d")
+    ret20 = returns.get("20d")
+    if ret5 is not None and ret5 >= 15:
+        flags.append("PRICE_ALREADY_MOVED_5D")
+    if ret10 is not None and ret10 >= 25:
+        flags.append("PRICE_ALREADY_MOVED_10D")
+    if ret20 is not None and ret20 >= 35:
+        flags.append("PRICE_ALREADY_MOVED_20D")
+    if (context.get("dist_sma20_pct") or 0) >= 20:
+        flags.append("CURRENT_SMA20_EXTENSION")
+    if (context.get("dist_sma50_pct") or 0) >= 35:
+        flags.append("CURRENT_SMA50_EXTENSION")
+    if flags:
+        flags.append("PRIORITY_DOWN_ALREADY_REFLECTED")
+    return flags
+
+
 def format_tradingview_direct_report(outcomes: list[TradingViewLabelOutcome], *, title: str) -> str:
     lines = [title, f"샘플: {len(outcomes)}건", ""]
     if not outcomes:

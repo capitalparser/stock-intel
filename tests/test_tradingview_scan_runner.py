@@ -6,6 +6,7 @@ from signals.tradingview_scan_runner import (
     format_telegram_outcome_cards,
     market_for_symbol,
     normalize_scan_symbol,
+    priority_sort_key,
     symbol_display_name,
     symbols_from_universe,
 )
@@ -114,3 +115,36 @@ def test_telegram_cards_include_korean_company_name_for_krx_symbol():
     )
 
     assert "1. KRX:103590 · 일진전기" in text
+
+
+def test_priority_sort_key_downgrades_large_post_signal_moves():
+    fresh = TradingViewLabelOutcome(
+        symbol="KRX:012510",
+        market="KR",
+        signal_date="2026-05-20",
+        first_signal_date="2026-05-20",
+        last_signal_date="2026-05-20",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=120000,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    reflected = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-04-22",
+        first_signal_date="2026-04-22",
+        last_signal_date="2026-04-22",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": 36.69, "10d": 64.69, "20d": 23.77},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    assert sorted([reflected, fresh], key=priority_sort_key) == [fresh, reflected]

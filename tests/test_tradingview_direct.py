@@ -1,6 +1,7 @@
 from signals.tradingview_direct import (
     classify_lazy_alpha_failure,
     classify_pre_signal_risks,
+    classify_priority_risks,
     format_tradingview_direct_report,
     is_lazy_alpha_buy_label,
     is_lazy_alpha_exit_label,
@@ -190,6 +191,17 @@ def test_classify_pre_signal_risks_flags_overheated_late_adds():
         )
         == "과열 추격/확장 리스크"
     )
+
+
+def test_classify_priority_risks_flags_moves_already_reflected_after_entry():
+    risks = classify_priority_risks(
+        returns={"5d": 36.69, "10d": 64.69, "20d": 23.77},
+        context={"dist_sma20_pct": 8, "dist_sma50_pct": 22},
+    )
+
+    assert "PRICE_ALREADY_MOVED_5D" in risks
+    assert "PRICE_ALREADY_MOVED_10D" in risks
+    assert "PRIORITY_DOWN_ALREADY_REFLECTED" in risks
 
 
 def test_format_report_includes_failure_class_summary():

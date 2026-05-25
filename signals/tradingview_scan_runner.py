@@ -10,6 +10,7 @@ from pathlib import Path
 
 from signals.tradingview_direct import (
     TradingViewLabelOutcome,
+    classify_priority_risks,
     map_lazy_alpha_labels_to_outcomes,
 )
 from utils.ticker import load_ticker_cache
@@ -143,8 +144,28 @@ def format_scan_report(
     if errors:
         lines.append("오류: " + " · ".join(f"{symbol}" for symbol, _error in errors[:5]))
     lines.append("")
-    lines.extend(format_telegram_outcome_cards(outcomes))
+    lines.extend(format_telegram_outcome_cards(sorted(outcomes, key=priority_sort_key)))
     return "\n".join(lines)
+
+
+def priority_sort_key(item: TradingViewLabelOutcome) -> tuple[int, str]:
+    return (adjusted_priority_penalty(item), item.signal_date)
+
+
+def adjusted_priority_penalty(item: TradingViewLabelOutcome) -> int:
+    return item.score_penalty_hint + priority_penalty(item)
+
+
+def priority_penalty(item: TradingViewLabelOutcome) -> int:
+    penalties = {
+        "PRICE_ALREADY_MOVED_5D": 10,
+        "PRICE_ALREADY_MOVED_10D": 10,
+        "PRICE_ALREADY_MOVED_20D": 8,
+        "CURRENT_SMA20_EXTENSION": 6,
+        "CURRENT_SMA50_EXTENSION": 6,
+    }
+    flags = classify_priority_risks(returns=item.returns, context=item.context)
+    return min(30, sum(penalties.get(flag, 0) for flag in set(flags)))
 
 
 def format_telegram_outcome_cards(
@@ -161,8 +182,11 @@ def format_telegram_outcome_cards(
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
     lines = [f"활성 매수 후보: {len(outcomes)}건"]
     for index, item in enumerate(outcomes, start=1):
-        risk = "없음" if not item.risk_flags else ", ".join(item.risk_flags)
-        status = "정상" if item.score_penalty_hint == 0 else f"주의 penalty {item.score_penalty_hint}"
+        priority_risks = classify_priority_risks(returns=item.returns, context=item.context)
+        combined_risks = [*item.risk_flags, *priority_risks]
+        risk = "없음" if not combined_risks else ", ".join(combined_risks)
+        adjusted_penalty = adjusted_priority_penalty(item)
+        status = "정상" if adjusted_penalty == 0 else f"주의 penalty {adjusted_penalty}"
         lines.extend(
             [
                 "",
