@@ -53,3 +53,10 @@ def test_render_signal_detail_uses_latest_matching_ticker(tmp_path, monkeypatch)
 
     assert "삼성전자" in text
     assert "독립성: BLOCKED" in text
+
+
+def test_help_text_shortcuts_do_not_fall_through_to_stock_lookup():
+    assert bot.is_help_text("기능") is True
+    assert bot.is_help_text("도움말") is True
+    assert bot.is_help_text("메뉴") is True
+    assert bot.is_help_text("삼성전자") is False

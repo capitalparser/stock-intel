@@ -77,6 +77,19 @@ _SIGNALS_URL: str = os.getenv("ASS_SIGNALS_URL", "")   # e.g. https://audit-safe
 _SIGNALS_SECRET: str = os.getenv("ASS_SIGNALS_SECRET", "")
 _KST = ZoneInfo("Asia/Seoul")
 
+HELP_TEXT = (
+    "종목명을 입력하면 수급현황, 공매도, 기술적 지표, 펀더멘탈, 감사법인을 보여드립니다.\n"
+    "DM: 삼성전자 / SK하이닉스 / NAVER\n"
+    "그룹: /s 삼성전자 또는 /stock 삼성전자\n\n"
+    "/signals — Lazy Alpha 버튼 콘솔\n"
+    "/buy kr 8h — 최근 국장 매수 후보\n"
+    "/sell 24h — 최근 매도 후보\n"
+    "/signal 005930 — 특정 종목 지표 판단\n"
+    "/feed — 최근 BUY 시그널 목록\n"
+    "/feed 50 — 최근 50건"
+)
+_HELP_TEXT_SHORTCUTS = {"기능", "도움말", "메뉴", "help"}
+
 # ---------------------------------------------------------------------------
 # 스케줄러
 # ---------------------------------------------------------------------------
@@ -212,6 +225,10 @@ def render_signal_detail(ticker: str, *, now: int | None = None) -> str:
     return format_signal_detail(row, now=now)
 
 
+def is_help_text(text: str) -> bool:
+    return text.strip().lower() in _HELP_TEXT_SHORTCUTS
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -343,17 +360,7 @@ async def handle_start(update: Update, context) -> None:
     if not await check_allowed(update):
         return
 
-    await update.message.reply_text(
-        "종목명을 입력하면 수급현황, 공매도, 기술적 지표, 펀더멘탈, 감사법인을 보여드립니다.\n"
-        "DM: 삼성전자 / SK하이닉스 / NAVER\n"
-        "그룹: /s 삼성전자 또는 /stock 삼성전자\n\n"
-        "/signals — Lazy Alpha 버튼 콘솔\n"
-        "/buy kr 8h — 최근 국장 매수 후보\n"
-        "/sell 24h — 최근 매도 후보\n"
-        "/signal 005930 — 특정 종목 지표 판단\n"
-        "/feed — 최근 BUY 시그널 목록\n"
-        "/feed 50 — 최근 50건"
-    )
+    await update.message.reply_text(HELP_TEXT)
 
 
 async def handle_ping(update: Update, context) -> None:
@@ -391,6 +398,9 @@ async def handle_text(update: Update, context) -> None:
         return
 
     query = update.message.text.strip()
+    if is_help_text(query):
+        await update.message.reply_text(HELP_TEXT)
+        return
     await _lookup_and_reply(update, query)
 
 
