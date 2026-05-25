@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from signals.tradingview_scan_runner import (
+    build_kr_signal_enrichments,
     format_scan_report,
     format_telegram_outcome_cards,
     market_for_symbol,
@@ -148,3 +149,49 @@ def test_priority_sort_key_downgrades_large_post_signal_moves():
     )
 
     assert sorted([reflected, fresh], key=priority_sort_key) == [fresh, reflected]
+
+
+def test_kr_enrichment_adds_supply_fundamental_and_auditor_to_cards():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-04-22",
+        first_signal_date="2026-04-22",
+        last_signal_date="2026-04-22",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": 36.69, "10d": 64.69, "20d": 23.77},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    enrichments = build_kr_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": 120_000_000, "5d": -340_000_000},
+            "foreigner": {"today": -50_000_000, "5d": 880_000_000},
+        },
+        fundamental_lookup=lambda ticker: {
+            "financials": [
+                {"year": 2024, "revenue": 1_000_000_000_000, "operating_income": 90_000_000_000},
+                {"year": 2025, "revenue": 1_300_000_000_000, "operating_income": 150_000_000_000},
+            ],
+            "ratios": {"per": 18.2, "pbr": 2.1},
+            "comment": "최근 2개년 매출 +30.0% · 영업이익 +66.7%",
+        },
+        audit_lookup=lambda ticker: {"current_year": 2025, "current_firm": "삼정회계법인"},
+    )
+
+    text = "\n".join(
+        format_telegram_outcome_cards(
+            [outcome],
+            ticker_cache=[{"code": "103590", "name": "일진전기", "market": "KOSPI"}],
+            enrichments=enrichments,
+        )
+    )
+
+    assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
+    assert "펀더멘탈: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text
+    assert "감사인: BLOCKED · 삼정회계법인 · 차단 감사인: 삼정회계법인" in text

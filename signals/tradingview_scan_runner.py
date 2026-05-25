@@ -7,7 +7,10 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
+from signals.independence import decide_independence
+from signals.market import Market, ticker_for_lookup
 from signals.tradingview_direct import (
     TradingViewLabelOutcome,
     classify_priority_risks,
@@ -26,6 +29,13 @@ class TradingViewScanResult:
     outcomes: list[TradingViewLabelOutcome]
     errors: list[tuple[str, str]]
     scanned: list[str]
+
+
+@dataclass(frozen=True)
+class KrSignalEnrichment:
+    supply: str
+    fundamental: str
+    auditor: str
 
 
 class TradingViewCli:
@@ -133,6 +143,7 @@ def format_scan_report(
     errors: list[tuple[str, str]],
     scanned: list[str],
     title: str = "📡 TradingView 직접 스캔",
+    enrichments: dict[str, KrSignalEnrichment] | None = None,
 ) -> str:
     lines = [
         f"📡 TradingView 직접 스캔 — {title}" if "TradingView 직접 스캔" not in title else title,
@@ -144,7 +155,12 @@ def format_scan_report(
     if errors:
         lines.append("오류: " + " · ".join(f"{symbol}" for symbol, _error in errors[:5]))
     lines.append("")
-    lines.extend(format_telegram_outcome_cards(sorted(outcomes, key=priority_sort_key)))
+    lines.extend(
+        format_telegram_outcome_cards(
+            sorted(outcomes, key=priority_sort_key),
+            enrichments=enrichments,
+        )
+    )
     return "\n".join(lines)
 
 
@@ -172,6 +188,7 @@ def format_telegram_outcome_cards(
     outcomes: list[TradingViewLabelOutcome],
     *,
     ticker_cache: list[dict] | None = None,
+    enrichments: dict[str, KrSignalEnrichment] | None = None,
 ) -> list[str]:
     if not outcomes:
         return [
@@ -201,9 +218,92 @@ def format_telegram_outcome_cards(
                 f"   리스크: {risk}",
             ]
         )
+        enrichment = (enrichments or {}).get(item.symbol)
+        if enrichment:
+            lines.extend(
+                [
+                    f"   수급: {enrichment.supply}",
+                    f"   펀더멘탈: {enrichment.fundamental}",
+                    f"   감사인: {enrichment.auditor}",
+                ]
+            )
         if item.failure_class:
             lines.append(f"   실패분류: {item.failure_class}")
     return lines
+
+
+def build_kr_signal_enrichments(
+    outcomes: list[TradingViewLabelOutcome],
+    *,
+    supply_lookup: Callable[[str], dict],
+    fundamental_lookup: Callable[[str], dict],
+    audit_lookup: Callable[[str], dict],
+) -> dict[str, KrSignalEnrichment]:
+    enrichments: dict[str, KrSignalEnrichment] = {}
+    for item in outcomes:
+        if item.market != "KR":
+            continue
+        ticker = ticker_for_lookup(item.symbol, "KR")
+        if not ticker.isdigit() or len(ticker) != 6:
+            continue
+        supply = _safe_lookup(supply_lookup, ticker)
+        fundamental = _safe_lookup(fundamental_lookup, ticker)
+        audit = _safe_lookup(audit_lookup, ticker)
+        decision = decide_independence(Market("KR", "한국"), audit)
+        enrichments[item.symbol] = KrSignalEnrichment(
+            supply=_format_supply_summary(supply),
+            fundamental=_format_fundamental_summary(fundamental),
+            auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
+        )
+    return enrichments
+
+
+def _safe_lookup(lookup: Callable[[str], dict], ticker: str) -> dict:
+    try:
+        return lookup(ticker)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _format_supply_summary(supply: dict) -> str:
+    if supply.get("error"):
+        return "데이터 없음"
+    inst = supply.get("institution") or {}
+    fore = supply.get("foreigner") or {}
+    return (
+        f"기관 오늘 {_fmt_amount_krw(inst.get('today'))} / 5일 {_fmt_amount_krw(inst.get('5d'))} · "
+        f"외국인 오늘 {_fmt_amount_krw(fore.get('today'))} / 5일 {_fmt_amount_krw(fore.get('5d'))}"
+    )
+
+
+def _format_fundamental_summary(fundamental: dict) -> str:
+    if fundamental.get("error"):
+        return "데이터 없음"
+    financials = fundamental.get("financials") or []
+    ratios = fundamental.get("ratios") or {}
+    parts: list[str] = []
+    if financials:
+        latest = sorted(financials, key=lambda row: row.get("year") or 0)[-1]
+        parts.append(f"매출 {latest.get('year')} {_fmt_amount_krw(latest.get('revenue'), signed=False)}")
+        parts.append(f"영업익 {_fmt_amount_krw(latest.get('operating_income'))}")
+    if ratios:
+        if ratios.get("per") is not None:
+            parts.append(f"PER {ratios.get('per'):.2f}x")
+        if ratios.get("pbr") is not None:
+            parts.append(f"PBR {ratios.get('pbr'):.2f}x")
+    return " · ".join(parts) if parts else "데이터 없음"
+
+
+def _format_auditor_summary(status: str, auditor: str | None, reason: str) -> str:
+    return f"{status} · {auditor or '-'} · {reason}"
+
+
+def _fmt_amount_krw(value: int | float | None, *, signed: bool = True) -> str:
+    if value is None:
+        return "-"
+    eok = round(value / 1e8)
+    sign = "+" if signed and eok > 0 else ""
+    return f"{sign}{eok:,}억"
 
 
 def symbol_display_name(symbol: str, *, ticker_cache: list[dict] | None = None) -> str:

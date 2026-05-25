@@ -50,6 +50,7 @@ from signals.console import (
 )
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
+    build_kr_signal_enrichments,
     format_scan_report,
     normalize_scan_symbol,
     priority_sort_key,
@@ -306,7 +307,18 @@ def render_tradingview_scan(args: list[str]) -> str:
     outcomes = result.outcomes
     if options["sort"] == "SCORE":
         outcomes = sorted(outcomes, key=priority_sort_key)
-    return format_scan_report(outcomes=outcomes, errors=result.errors, scanned=result.scanned)
+    enrichments = build_kr_signal_enrichments(
+        outcomes,
+        supply_lookup=fetch_supply,
+        fundamental_lookup=fetch_fundamental,
+        audit_lookup=fetch_audit_firm,
+    )
+    return format_scan_report(
+        outcomes=outcomes,
+        errors=result.errors,
+        scanned=result.scanned,
+        enrichments=enrichments,
+    )
 
 
 def parse_tradingview_scan_args(args: list[str]) -> dict:
