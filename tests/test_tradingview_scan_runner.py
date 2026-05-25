@@ -82,7 +82,8 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "━━━━━━━━" not in text
     assert "1. NASDAQ:AAPL · 기술점수 100점" in text
     assert "시그널: 2026-04-24 · 💰 진입" in text
-    assert "이후 흐름: 5일 +3.35%" in text
+    assert "신호 기준가: 271" in text
+    assert "이후 흐름:" not in text
 
 
 def test_symbol_display_name_adds_korean_company_name_for_krx_symbol():
@@ -192,7 +193,8 @@ def test_kr_enrichment_adds_supply_fundamental_and_auditor_to_cards():
         )
     )
 
-    assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
-    assert "실적/밸류: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text
     assert "감사인: 현재연도 감사인 확인 필요 · 삼정회계법인" in text
     assert "2026 감사인 직접 확인 없음" in text
+    assert text.index("감사인:") < text.index("수급:")
+    assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
+    assert "실적/밸류: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text

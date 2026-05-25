@@ -214,13 +214,7 @@ def format_telegram_outcome_cards(
                 f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)} · 기술점수 {score}점",
                 f"판정: {status}",
                 f"시그널: {item.signal_date} · {item.label} · 중복 {item.duplicate_count}회",
-                f"가격: {_fmt_price(item.entry_price)}{price_unit}",
-                (
-                    "이후 흐름: "
-                    f"5일 {_fmt_pct(item.returns.get('5d'))} / "
-                    f"10일 {_fmt_pct(item.returns.get('10d'))} / "
-                    f"20일 {_fmt_pct(item.returns.get('20d'))}"
-                ),
+                f"신호 기준가: {_fmt_price(item.entry_price)}{price_unit}",
                 f"감점 사유: {risk}",
             ]
         )
@@ -228,9 +222,9 @@ def format_telegram_outcome_cards(
         if enrichment:
             lines.extend(
                 [
+                    f"감사인: {enrichment.auditor}",
                     f"수급: {enrichment.supply}",
                     f"실적/밸류: {enrichment.fundamental}",
-                    f"감사인: {enrichment.auditor}",
                 ]
             )
         if item.failure_class:
