@@ -1,7 +1,7 @@
 [project]
 name = "stock-intel"
-version = "0.1.0"
-description = "국장 주식 투자 데이터 통합 Telegram 봇"
+version = "0.2.0"
+description = "국장 주식 투자 데이터 통합 Telegram 봇 + TradingView 시그널 알림"
 requires-python = ">=3.12"
 dependencies = [
     "pykrx>=1.0.0",
@@ -12,6 +12,17 @@ dependencies = [
     "rapidfuzz>=3.0.0",
     "apscheduler>=3.10.0",
     "kreports>=0.1.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.21.0",
 ]
 
 [build-system]
@@ -19,7 +30,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["data", "utils"]
+packages = ["data", "utils", "signals"]
 
 [tool.uv]
 required-version = ">=0.4"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "live: requires live external services. Deselected by default.",
+]
+addopts = "-m 'not live'"
