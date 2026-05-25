@@ -14,6 +14,7 @@ sections into one mobile-readable answer.
 | Formatter | Telegram message assembly and section degradation display | `utils/formatter.py` |
 | Cache/Data | Local ticker cache and temporary source artifacts | `cache/`, `data/` |
 | Plans | Feature and migration planning records | `plans/` |
+| Master Score Bridge | Optional local bridge to `19_master_technical_score` for Telegram scorecard display | `signals/master_score.py` |
 
 ## Feature Addition Rules
 
@@ -22,6 +23,8 @@ sections into one mobile-readable answer.
 - Do not mix source fetching, investment commentary, and Telegram formatting in
   one function.
 - Auditor data must remain traceable to `kreports` or a documented fallback.
+- Master Score integration must remain optional; if `19_master_technical_score`
+  is not available, Telegram output must degrade to the existing Lazy Alpha view.
 
 ## Documentation Gap
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from signals.master_score import format_master_score_for_payload
 from signals.storage import ActiveSignalRow, SignalEventRow
 
 
@@ -106,9 +107,15 @@ def format_console(
         conviction = payload.get("conviction", "-")
         active_age = _active_age(row, current)
         active_suffix = f" · active {active_age}" if active_age else ""
+        master_score = format_master_score_for_payload(
+            payload,
+            independence_status=row.independence_status,
+        )
+        master_score_line = f"\n   {master_score.splitlines()[0]}" if master_score else ""
         lines.append(
             f"{idx}. {name} ({row.ticker}) · {row.market} · {row.action}\n"
             f"   {row.base_type} · Score {score} · {conviction}등급 · 독립성 {row.independence_status}{active_suffix}"
+            f"{master_score_line}"
         )
     return "\n".join(lines)
 
@@ -125,11 +132,17 @@ def format_signal_detail(row: SignalEventRow | None, *, now: int | None = None) 
     atr_dot = payload.get("atr_dot", "-")
     daily_trend = payload.get("daily_trend") or "-"
     daily_rs = payload.get("daily_rs", "-")
+    master_score = format_master_score_for_payload(
+        payload,
+        independence_status=row.independence_status,
+    )
+    master_score_lines = [master_score, ""] if master_score else []
     return "\n".join(
         [
             f"🔎 {name} ({row.ticker})",
             f"시그널: {row.action} · {row.base_type} · {row.timeframe}",
             f"판단: {status} · Score {score} · {conviction}등급",
+            *master_score_lines,
             f"일봉: {daily_trend} · RS {daily_rs}",
             f"과열/리스크: sb_z_score {z_score} · ATR dot {atr_dot}",
             f"독립성: {row.independence_status}",
