@@ -39,6 +39,8 @@ NON_BUY_LABEL_KEYWORDS = (
     "셋업",
     "TP",
     "종료",
+    "SELL",
+    "매도",
     "Short",
     "PBS",
     "PBB",
@@ -53,6 +55,8 @@ EXIT_LABEL_KEYWORDS = (
     "이탈",
     "종료",
     "SL",
+    "SELL",
+    "매도",
 )
 
 
@@ -95,12 +99,15 @@ def map_lazy_alpha_labels_to_outcomes(
         if not isinstance(x_value, int):
             continue
         bar_index = x_value - offset
-        if bar_index < 0 or bar_index >= len(bars):
+        if bar_index < 0:
+            continue
+        if is_lazy_alpha_exit_label(text):
+            exit_bar_indexes.append(bar_index)
+            continue
+        if bar_index >= len(bars):
             continue
         if is_lazy_alpha_buy_label(text):
             candidates.append((bar_index, label))
-        elif is_lazy_alpha_exit_label(text):
-            exit_bar_indexes.append(bar_index)
 
     outcomes: list[TradingViewLabelOutcome] = []
     for cluster in _cluster_candidates(candidates, duplicate_window_bars=duplicate_window_bars):

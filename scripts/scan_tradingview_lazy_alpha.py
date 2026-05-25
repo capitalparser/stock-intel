@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbols", nargs="*", help="TradingView symbols, e.g. NASDAQ:AAPL NYSE:PLTR")
     parser.add_argument("--limit", type=int, default=30)
     parser.add_argument("--bars", type=int, default=500)
-    parser.add_argument("--max-labels", type=int, default=200)
+    parser.add_argument("--max-labels", type=int, default=250)
     parser.add_argument("--timeframe", default="D")
     parser.add_argument("--duplicate-window-bars", type=int, default=5)
     parser.add_argument("--entry-policy", choices=["first", "last"], default="first")

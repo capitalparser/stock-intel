@@ -300,7 +300,7 @@ def render_tradingview_scan(args: list[str]) -> str:
         options["symbols"],
         mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
         bars=500,
-        max_labels=200,
+        max_labels=250,
         timeframe="D",
         sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
     )

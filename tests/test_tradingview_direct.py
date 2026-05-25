@@ -14,6 +14,7 @@ def test_is_lazy_alpha_buy_label_filters_signal_texts():
     assert is_lazy_alpha_buy_label("🚀채널 상방 돌파") is True
     assert is_lazy_alpha_buy_label("🔼 피라미딩 추매 1 (50%)") is True
     assert is_lazy_alpha_buy_label("💸 최종 청산") is False
+    assert is_lazy_alpha_buy_label("모멘텀 SELL") is False
     assert is_lazy_alpha_buy_label("PBB") is False
     assert is_lazy_alpha_buy_label("🛠️ 셋업 형성 중") is False
 
@@ -22,6 +23,8 @@ def test_is_lazy_alpha_exit_label_identifies_position_reset_texts():
     assert is_lazy_alpha_exit_label("💸 최종 청산") is True
     assert is_lazy_alpha_exit_label("🛑 손절") is True
     assert is_lazy_alpha_exit_label("20일선 이탈") is True
+    assert is_lazy_alpha_exit_label("모멘텀 SELL") is True
+    assert is_lazy_alpha_exit_label("매도 신호") is True
     assert is_lazy_alpha_exit_label("💰 진입") is False
 
 
@@ -112,6 +115,54 @@ def test_map_lazy_alpha_labels_resets_entry_after_later_exit_label():
         bars=bars,
         labels=labels,
         total_available=70,
+        duplicate_window_bars=5,
+        horizons=(5,),
+        active_only=True,
+    )
+
+    assert outcomes == []
+
+
+def test_map_lazy_alpha_labels_resets_entry_after_later_momentum_sell_label():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(70)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 45, "price": None},
+        {"text": "모멘텀 SELL", "x": 55, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=70,
+        duplicate_window_bars=5,
+        horizons=(5,),
+        active_only=True,
+    )
+
+    assert outcomes == []
+
+
+def test_map_lazy_alpha_labels_resets_entry_after_exit_label_beyond_loaded_bars():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(60)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 55, "price": None},
+        {"text": "📉 모멘텀 SELL", "x": 72, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=60,
         duplicate_window_bars=5,
         horizons=(5,),
         active_only=True,
