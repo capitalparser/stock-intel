@@ -1,8 +1,10 @@
 import json
 import socket
+from types import SimpleNamespace
 from pathlib import Path
 
 import bot
+from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome
 from signals.payload import TradingViewSignal
 from signals.storage import SignalStore
 from signals.universe import build_universe_snapshot, save_universe_snapshot
@@ -55,6 +57,85 @@ def test_render_signal_detail_uses_latest_matching_ticker(tmp_path, monkeypatch)
 
     assert "삼성전자" in text
     assert "독립성: BLOCKED" in text
+
+
+def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-20",
+        first_signal_date="2026-05-20",
+        last_signal_date="2026-05-20",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    monkeypatch.setattr(
+        bot,
+        "scan_tradingview_symbols",
+        lambda symbols, **kwargs: SimpleNamespace(outcomes=[outcome], exclusions=[], errors=[], scanned=symbols),
+    )
+
+    text = bot.render_lazy_alpha_status_for_symbol("KRX:103590")
+
+    assert "판정: 매수 후보 유지" in text
+    assert "기술점수: 100점" in text
+    assert "확인: 이후 청산/SELL 라벨 없음" in text
+
+
+def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
+    exclusion = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date=None,
+        exit_label="📉 모멘텀 SELL\nENTRY: 9000",
+        entry_bar_index=297,
+        exit_bar_index=409,
+    )
+
+    monkeypatch.setattr(
+        bot,
+        "scan_tradingview_symbols",
+        lambda symbols, **kwargs: SimpleNamespace(outcomes=[], exclusions=[exclusion], errors=[], scanned=symbols),
+    )
+
+    text = bot.render_lazy_alpha_status_for_symbol("KRX:300080")
+
+    assert "판정: 매수 후보 아님" in text
+    assert "차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
+    assert "직전 진입: 2026-05-20 · 💰 진입" in text
+
+
+def test_render_stock_lookup_report_appends_lazy_alpha_section(monkeypatch):
+    monkeypatch.setattr(
+        bot,
+        "fetch_all",
+        lambda ticker: (
+            {"error": "skip"},
+            {"error": "skip"},
+            {"error": "skip"},
+            {"error": "skip"},
+            {"error": "skip"},
+        ),
+    )
+    monkeypatch.setattr(
+        bot,
+        "render_lazy_alpha_status_for_symbol",
+        lambda symbol: f"📡 Lazy Alpha 현재 상태\n대상: {symbol}",
+    )
+
+    text = bot.render_stock_lookup_report("300080", "플리토")
+
+    assert "📊 플리토 (300080)" in text
+    assert "📡 Lazy Alpha 현재 상태" in text
+    assert "대상: KRX:300080" in text
 
 
 def test_help_text_shortcuts_do_not_fall_through_to_stock_lookup():

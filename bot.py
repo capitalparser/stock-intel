@@ -50,6 +50,7 @@ from signals.console import (
 )
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
+    adjusted_priority_penalty,
     build_kr_signal_enrichments,
     format_scan_report,
     normalize_scan_symbol,
@@ -157,6 +158,89 @@ def fetch_all(ticker: str) -> tuple[dict, dict, dict, dict, dict]:
     return supply, short_sell, technical, fundamental, audit
 
 
+def render_stock_lookup_report(
+    ticker: str,
+    name: str,
+    *,
+    include_lazy_alpha: bool | None = None,
+) -> str:
+    supply, short_sell, technical, fundamental, audit = fetch_all(ticker)
+    text = format_message(
+        name,
+        ticker,
+        supply,
+        short_sell,
+        technical,
+        fundamental,
+        audit,
+    )
+    enabled = include_lazy_alpha
+    if enabled is None:
+        enabled = os.getenv("STOCK_LOOKUP_LAZY_ALPHA", "1") not in {"0", "false", "False"}
+    if not enabled:
+        return text
+    return text + "\n\n" + render_lazy_alpha_status_for_symbol(f"KRX:{ticker}")
+
+
+def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
+    try:
+        result = scan_tradingview_symbols(
+            [normalize_scan_symbol(symbol)],
+            mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
+            bars=500,
+            max_labels=250,
+            timeframe="D",
+            sleep_seconds=float(os.getenv("TRADINGVIEW_SINGLE_SCAN_SLEEP", "1.2")),
+        )
+    except Exception as exc:
+        return "📡 Lazy Alpha 현재 상태\n판정: 확인 실패\n사유: " + str(exc)
+
+    lines = ["📡 Lazy Alpha 현재 상태"]
+    if result.outcomes:
+        item = sorted(result.outcomes, key=priority_sort_key)[0]
+        penalty = adjusted_priority_penalty(item)
+        score = max(0, 100 - penalty)
+        status = "매수 후보 유지" if penalty == 0 else f"주의 필요 · 감점 {penalty}"
+        price_unit = "원" if item.market == "KR" else ""
+        lines.extend(
+            [
+                f"판정: {status}",
+                f"기술점수: {score}점",
+                f"시그널: {item.signal_date} · {_compact_label(item.label)}",
+                f"신호 기준가: {_fmt_scan_price(item.entry_price)}{price_unit}",
+                "확인: 이후 청산/SELL 라벨 없음",
+            ]
+        )
+    elif result.exclusions:
+        item = sorted(result.exclusions, key=lambda row: row.exit_bar_index, reverse=True)[0]
+        exit_date = item.exit_date or "차트 우측 최신 라벨"
+        lines.extend(
+            [
+                "판정: 매수 후보 아님",
+                f"사유: {exit_date} · {_compact_label(item.exit_label)}",
+                f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "판정: 현재 매수 후보 아님",
+                "사유: Lazy Alpha 진입 라벨 없음",
+            ]
+        )
+    if result.errors:
+        lines.append("오류: " + " · ".join(symbol for symbol, _error in result.errors[:3]))
+    return "\n".join(lines)
+
+
+def _compact_label(text: str) -> str:
+    return " / ".join(part.strip() for part in text.splitlines() if part.strip()) or "-"
+
+
+def _fmt_scan_price(value: float) -> str:
+    return f"{value:,.0f}" if value >= 100 else f"{value:.2f}"
+
+
 # ---------------------------------------------------------------------------
 # 공통 조회 + 전송 헬퍼
 # ---------------------------------------------------------------------------
@@ -167,19 +251,7 @@ async def _fetch_and_reply(
     loading_message,
 ) -> None:
     """ticker로 fetch_all 실행 후 결과를 loading_message에 edit해 전송."""
-    supply, short_sell, technical, fundamental, audit = await asyncio.to_thread(
-        fetch_all,
-        ticker,
-    )
-    text = format_message(
-        name,
-        ticker,
-        supply,
-        short_sell,
-        technical,
-        fundamental,
-        audit,
-    )
+    text = await asyncio.to_thread(render_stock_lookup_report, ticker, name)
     await loading_message.edit_text(text)
 
 
@@ -539,7 +611,7 @@ async def handle_tradingview_scan_command(update: Update, context) -> None:
 
 
 async def handle_korean_stock_command(update: Update, context) -> None:
-    """/종목 텍스트 트리거. Lazy Alpha 판단을 우선 보여주고, 저장값이 없으면 일반 종목 조회로 fallback."""
+    """/종목 텍스트 트리거. 종목 리서치와 현재 TradingView Lazy Alpha 판단을 함께 보여준다."""
     if not await check_allowed(update):
         return
 
@@ -547,11 +619,6 @@ async def handle_korean_stock_command(update: Update, context) -> None:
     query = " ".join(args).strip()
     if not query:
         await update.message.reply_text("조회할 종목명이나 종목코드를 같이 보내주세요.\n예) /종목 005930")
-        return
-
-    signal_text = await asyncio.to_thread(render_signal_detail, query)
-    if "저장된 Lazy Alpha 시그널이 없습니다" not in signal_text:
-        await update.message.reply_text(signal_text)
         return
 
     await _lookup_and_reply(update, query)
@@ -681,19 +748,7 @@ async def handle_callback(update: Update, context) -> None:
     _, ticker, name = parts
 
     await query.edit_message_text("🔍 조회 중...")
-    supply, short_sell, technical, fundamental, audit = await asyncio.to_thread(
-        fetch_all,
-        ticker,
-    )
-    text = format_message(
-        name,
-        ticker,
-        supply,
-        short_sell,
-        technical,
-        fundamental,
-        audit,
-    )
+    text = await asyncio.to_thread(render_stock_lookup_report, ticker, name)
     await query.edit_message_text(text)
 
 
