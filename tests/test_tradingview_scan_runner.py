@@ -3,6 +3,7 @@ from pathlib import Path
 
 from signals.tradingview_scan_runner import (
     build_kr_signal_enrichments,
+    format_telegram_exclusion_cards,
     format_scan_report,
     format_telegram_outcome_cards,
     market_for_symbol,
@@ -11,7 +12,7 @@ from signals.tradingview_scan_runner import (
     symbol_display_name,
     symbols_from_universe,
 )
-from signals.tradingview_direct import TradingViewLabelOutcome
+from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome
 
 
 def test_normalize_scan_symbol_adds_default_exchange_prefixes():
@@ -84,6 +85,55 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "시그널: 2026-04-24 · 💰 진입" in text
     assert "신호 기준가: 271" in text
     assert "이후 흐름:" not in text
+
+
+def test_format_scan_report_includes_exclusion_reason_cards():
+    exclusion = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date=None,
+        exit_label="📉 모멘텀 SELL\nENTRY: 9000",
+        entry_bar_index=297,
+        exit_bar_index=409,
+    )
+
+    text = format_scan_report(
+        outcomes=[],
+        exclusions=[exclusion],
+        errors=[],
+        scanned=["KRX:300080"],
+    )
+
+    assert "활성 후보: 0건 · 제외: 1건" in text
+    assert "제외 후보: 1건" in text
+    assert "주요 제외 사유: 📉 모멘텀 SELL / ENTRY: 9000 1건" in text
+    assert "1. KRX:300080" in text
+    assert "제외: 차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
+    assert "직전 진입: 2026-05-20 · 💰 진입" in text
+
+
+def test_format_telegram_exclusion_cards_uses_korean_names():
+    exclusion = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date="2026-05-24",
+        exit_label="📉 모멘텀 SELL",
+        entry_bar_index=297,
+        exit_bar_index=309,
+    )
+
+    text = "\n".join(
+        format_telegram_exclusion_cards(
+            [exclusion],
+            ticker_cache=[{"code": "300080", "name": "플리토", "market": "KOSDAQ"}],
+        )
+    )
+
+    assert "1. KRX:300080 · 플리토" in text
 
 
 def test_symbol_display_name_adds_korean_company_name_for_krx_symbol():

@@ -316,6 +316,7 @@ def render_tradingview_scan(args: list[str]) -> str:
     )
     return format_scan_report(
         outcomes=outcomes,
+        exclusions=result.exclusions,
         errors=result.errors,
         scanned=result.scanned,
         enrichments=enrichments,

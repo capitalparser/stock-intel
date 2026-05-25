@@ -24,6 +24,18 @@ class TradingViewLabelOutcome:
     failure_class: str | None = None
 
 
+@dataclass(frozen=True)
+class TradingViewExcludedSignal:
+    symbol: str
+    market: str
+    signal_date: str
+    label: str
+    exit_date: str | None
+    exit_label: str
+    entry_bar_index: int
+    exit_bar_index: int
+
+
 BUY_LABEL_KEYWORDS = (
     "진입",
     "추매",
@@ -146,6 +158,60 @@ def map_lazy_alpha_labels_to_outcomes(
             )
         )
     return outcomes
+
+
+def map_lazy_alpha_labels_to_exclusions(
+    *,
+    symbol: str,
+    market: str,
+    bars: list[dict],
+    labels: list[dict],
+    total_available: int | None = None,
+    duplicate_window_bars: int = 5,
+    entry_policy: str = "first",
+) -> list[TradingViewExcludedSignal]:
+    if not bars:
+        return []
+    offset = max(0, (total_available or len(bars)) - len(bars))
+    candidates: list[tuple[int, dict]] = []
+    exits: list[tuple[int, dict]] = []
+    for label in labels:
+        text = str(label.get("text") or "")
+        x_value = label.get("x")
+        if not isinstance(x_value, int):
+            continue
+        bar_index = x_value - offset
+        if bar_index < 0:
+            continue
+        if is_lazy_alpha_exit_label(text):
+            exits.append((bar_index, label))
+            continue
+        if bar_index >= len(bars):
+            continue
+        if is_lazy_alpha_buy_label(text):
+            candidates.append((bar_index, label))
+
+    excluded: list[TradingViewExcludedSignal] = []
+    for cluster in _cluster_candidates(candidates, duplicate_window_bars=duplicate_window_bars):
+        selected_bar_index, selected_label = _select_cluster_entry(cluster, entry_policy=entry_policy)
+        last_bar_index = cluster[-1][0]
+        later_exits = [(bar_index, label) for bar_index, label in exits if bar_index > last_bar_index]
+        if not later_exits:
+            continue
+        exit_bar_index, exit_label = min(later_exits, key=lambda item: item[0])
+        excluded.append(
+            TradingViewExcludedSignal(
+                symbol=symbol,
+                market=market,
+                signal_date=_date_from_bar(bars[selected_bar_index]),
+                label=str(selected_label.get("text") or ""),
+                exit_date=_date_from_bar(bars[exit_bar_index]) if exit_bar_index < len(bars) else None,
+                exit_label=str(exit_label.get("text") or ""),
+                entry_bar_index=selected_bar_index,
+                exit_bar_index=exit_bar_index,
+            )
+        )
+    return excluded
 
 
 def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:

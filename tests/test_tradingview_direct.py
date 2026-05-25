@@ -5,6 +5,7 @@ from signals.tradingview_direct import (
     format_tradingview_direct_report,
     is_lazy_alpha_buy_label,
     is_lazy_alpha_exit_label,
+    map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
 )
 
@@ -145,6 +146,31 @@ def test_map_lazy_alpha_labels_resets_entry_after_later_momentum_sell_label():
     )
 
     assert outcomes == []
+
+
+def test_map_lazy_alpha_labels_reports_exclusion_after_later_momentum_sell_label():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(70)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 45, "price": None},
+        {"text": "모멘텀 SELL", "x": 55, "price": None},
+    ]
+
+    exclusions = map_lazy_alpha_labels_to_exclusions(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=70,
+        duplicate_window_bars=5,
+    )
+
+    assert len(exclusions) == 1
+    assert exclusions[0].symbol == "KRX:300080"
+    assert exclusions[0].label == "💰 진입"
+    assert exclusions[0].exit_label == "모멘텀 SELL"
 
 
 def test_map_lazy_alpha_labels_resets_entry_after_exit_label_beyond_loaded_bars():

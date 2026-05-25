@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -12,8 +13,10 @@ from typing import Callable
 from signals.independence import decide_independence
 from signals.market import Market, ticker_for_lookup
 from signals.tradingview_direct import (
+    TradingViewExcludedSignal,
     TradingViewLabelOutcome,
     classify_priority_risks,
+    map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
 )
 from utils.ticker import load_ticker_cache
@@ -27,6 +30,7 @@ PREFERRED_WATCHLIST_KEYWORDS = ("관심", "예비", "jesse", "국장", "미장",
 @dataclass(frozen=True)
 class TradingViewScanResult:
     outcomes: list[TradingViewLabelOutcome]
+    exclusions: list[TradingViewExcludedSignal]
     errors: list[tuple[str, str]]
     scanned: list[str]
 
@@ -59,7 +63,7 @@ def scan_tradingview_symbols(
     *,
     mcp_dir: Path,
     bars: int = 500,
-    max_labels: int = 200,
+    max_labels: int = 250,
     timeframe: str = "D",
     duplicate_window_bars: int = 5,
     entry_policy: str = "first",
@@ -68,6 +72,7 @@ def scan_tradingview_symbols(
 ) -> TradingViewScanResult:
     cli = runner or TradingViewCli(mcp_dir)
     outcomes: list[TradingViewLabelOutcome] = []
+    exclusions: list[TradingViewExcludedSignal] = []
     errors: list[tuple[str, str]] = []
     scanned: list[str] = []
     for symbol in symbols:
@@ -83,22 +88,36 @@ def scan_tradingview_symbols(
                 for study in labels.get("studies", [])
                 for label in study.get("labels", [])
             ]
+            market = market_for_symbol(symbol)
+            bars_payload = ohlcv.get("bars", [])
+            total_available = ohlcv.get("total_available")
             outcomes.extend(
                 map_lazy_alpha_labels_to_outcomes(
                     symbol=symbol,
-                    market=market_for_symbol(symbol),
-                    bars=ohlcv.get("bars", []),
+                    market=market,
+                    bars=bars_payload,
                     labels=study_labels,
-                    total_available=ohlcv.get("total_available"),
+                    total_available=total_available,
                     duplicate_window_bars=duplicate_window_bars,
                     entry_policy=entry_policy,
                     active_only=True,
                 )
             )
+            exclusions.extend(
+                map_lazy_alpha_labels_to_exclusions(
+                    symbol=symbol,
+                    market=market,
+                    bars=bars_payload,
+                    labels=study_labels,
+                    total_available=total_available,
+                    duplicate_window_bars=duplicate_window_bars,
+                    entry_policy=entry_policy,
+                )
+            )
             scanned.append(symbol)
         except Exception as exc:  # pragma: no cover - external CLI boundary
             errors.append((symbol, str(exc)))
-    return TradingViewScanResult(outcomes=outcomes, errors=errors, scanned=scanned)
+    return TradingViewScanResult(outcomes=outcomes, exclusions=exclusions, errors=errors, scanned=scanned)
 
 
 def symbols_from_universe(path: Path, *, limit: int, market: str | None = None) -> list[str]:
@@ -144,11 +163,12 @@ def format_scan_report(
     scanned: list[str],
     title: str = "📡 TradingView 직접 스캔",
     enrichments: dict[str, KrSignalEnrichment] | None = None,
+    exclusions: list[TradingViewExcludedSignal] | None = None,
 ) -> str:
     lines = [
         f"📡 TradingView 직접 스캔 — {title}" if "TradingView 직접 스캔" not in title else title,
         "기준: 웹훅 저장소가 아니라 현재 열린 TradingView 차트의 Lazy Alpha 라벨을 직접 읽음",
-        f"스캔: {len(scanned)}종목 · 라벨 매핑: {len(outcomes)}건",
+        f"스캔: {len(scanned)}종목 · 활성 후보: {len(outcomes)}건 · 제외: {len(exclusions or [])}건",
     ]
     if scanned:
         lines.append("대상: " + ", ".join(scanned[:12]))
@@ -161,6 +181,9 @@ def format_scan_report(
             enrichments=enrichments,
         )
     )
+    if exclusions:
+        lines.append("")
+        lines.extend(format_telegram_exclusion_cards(exclusions))
     return "\n".join(lines)
 
 
@@ -229,6 +252,37 @@ def format_telegram_outcome_cards(
             )
         if item.failure_class:
             lines.append(f"실패분류: {item.failure_class}")
+    return lines
+
+
+def format_telegram_exclusion_cards(
+    exclusions: list[TradingViewExcludedSignal],
+    *,
+    ticker_cache: list[dict] | None = None,
+    limit: int = 12,
+) -> list[str]:
+    cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
+    reason_counts = Counter(_compact_label(item.exit_label) for item in exclusions)
+    lines = [
+        f"제외 후보: {len(exclusions)}건",
+        "기준: 진입 이후 손절/청산/이탈/SELL 라벨 확인",
+    ]
+    if reason_counts:
+        summary = " · ".join(f"{reason} {count}건" for reason, count in reason_counts.most_common(5))
+        lines.append(f"주요 제외 사유: {summary}")
+    for index, item in enumerate(
+        sorted(exclusions, key=lambda row: (row.exit_bar_index, row.symbol), reverse=True)[:limit],
+        start=1,
+    ):
+        exit_date = item.exit_date or "차트 우측 최신 라벨"
+        lines.extend(
+            [
+                "",
+                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
+                f"제외: {exit_date} · {_compact_label(item.exit_label)}",
+                f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
+            ]
+        )
     return lines
 
 
@@ -304,6 +358,10 @@ def _format_auditor_summary(status: str, auditor: str | None, reason: str) -> st
         "DATA_MISSING": "감사인 데이터 없음",
     }
     return f"{labels.get(status, status)} · {auditor or '-'} · {reason}"
+
+
+def _compact_label(text: str) -> str:
+    return " / ".join(part.strip() for part in text.splitlines() if part.strip()) or "-"
 
 
 def _fmt_amount_krw(value: int | float | None, *, signed: bool = True) -> str:

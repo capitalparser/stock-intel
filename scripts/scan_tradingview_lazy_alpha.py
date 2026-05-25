@@ -47,6 +47,12 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     print(format_tradingview_direct_report(result.outcomes, title="TradingView Lazy Alpha 직접 사후검증"))
+    if result.exclusions:
+        print()
+        print(f"excluded: {len(result.exclusions)}")
+        for item in result.exclusions[:20]:
+            exit_date = item.exit_date or "right-edge"
+            print(f"- {item.symbol}: {item.signal_date} {item.label} -> {exit_date} {item.exit_label}")
     if result.errors:
         print()
         print("errors:")
