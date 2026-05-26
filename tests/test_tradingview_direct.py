@@ -7,6 +7,7 @@ from signals.tradingview_direct import (
     is_lazy_alpha_buy_label,
     is_lazy_alpha_exit_label,
     interpret_lazy_alpha_flow,
+    TradingViewLabelFlowItem,
     map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
@@ -375,9 +376,43 @@ def test_interpret_lazy_alpha_flow_summarizes_stage_risk_and_action():
     interpretation = interpret_lazy_alpha_flow(flow)
 
     assert interpretation.stage == "재진입 후 추매 단계"
+    assert interpretation.pattern == "청산 후 재진입 추매"
+    assert interpretation.score_adjustment < 0
+    assert interpretation.confidence == "주의"
     assert "셋업 후 돌파 진입" in interpretation.summary
     assert "청산/이탈 2회" in interpretation.risk
     assert "신규 추격보다 눌림" in interpretation.action
+
+
+def test_interpret_lazy_alpha_flow_rewards_clean_setup_breakout_sequence():
+    flow = [
+        TradingViewLabelFlowItem("2026-05-22", "🛠️ 셋업 형성 중", 1),
+        TradingViewLabelFlowItem("2026-05-25", "🚀 돌파 진입", 2),
+    ]
+
+    interpretation = interpret_lazy_alpha_flow(flow)
+
+    assert interpretation.pattern == "셋업 후 돌파"
+    assert interpretation.score_adjustment == 5
+    assert interpretation.confidence == "양호"
+
+
+def test_interpret_lazy_alpha_flow_penalizes_repeated_whipsaw_sequence():
+    flow = [
+        TradingViewLabelFlowItem("2026-05-20", "💰 진입", 1),
+        TradingViewLabelFlowItem("2026-05-21", "⚠️ 8선 이탈", 2),
+        TradingViewLabelFlowItem("2026-05-22", "💰 진입", 3),
+        TradingViewLabelFlowItem("2026-05-23", "💣 돌파 청산", 4),
+        TradingViewLabelFlowItem("2026-05-24", "🛠️ 셋업 형성 중", 5),
+        TradingViewLabelFlowItem("2026-05-25", "🚀 돌파 진입", 6),
+    ]
+
+    interpretation = interpret_lazy_alpha_flow(flow)
+
+    assert interpretation.pattern == "휩쏘 후 재돌파"
+    assert interpretation.score_adjustment == -8
+    assert interpretation.confidence == "위험"
+    assert "청산/이탈 2회" in interpretation.risk
 
 
 def test_parse_lazy_alpha_tables_extracts_score_and_risk_reward_metrics():

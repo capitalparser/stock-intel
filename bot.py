@@ -333,6 +333,7 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
                 [
                     "",
                     "라벨 해석",
+                    f"패턴: {interpretation.pattern} · {interpretation.confidence} · 점수영향 {interpretation.score_adjustment:+d}",
                     f"단계: {interpretation.stage}",
                     f"요약: {interpretation.summary}",
                     f"주의: {interpretation.risk}",
@@ -562,6 +563,7 @@ def render_tradingview_scan(args: list[str]) -> str:
         scanned=result.scanned,
         enrichments=enrichments,
         table_snapshots=result.table_snapshots,
+        label_flows=result.label_flows,
         title=options["title"],
         include_exclusions=options["include_exclusions"],
         requested_count=len(options["symbols"]),

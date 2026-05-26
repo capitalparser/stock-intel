@@ -14,7 +14,7 @@ from signals.tradingview_scan_runner import (
     symbol_display_name,
     symbols_from_universe,
 )
-from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome, TradingViewTableSnapshot
+from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelFlowItem, TradingViewLabelOutcome, TradingViewTableSnapshot
 
 
 def test_normalize_scan_symbol_adds_default_exchange_prefixes():
@@ -105,6 +105,74 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "시그널: 2026-04-24 · 💰 진입" in text
     assert "신호 기준가: 271" in text
     assert "이후 흐름:" not in text
+
+
+def test_format_scan_report_includes_label_flow_interpretation():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:437730",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=60000,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_scan_report(
+        outcomes=[outcome],
+        errors=[],
+        scanned=["KRX:437730"],
+        label_flows={
+            "KRX:437730": [
+                TradingViewLabelFlowItem("2026-05-22", "🛠️ 셋업 형성 중", 1),
+                TradingViewLabelFlowItem("2026-05-26", "🚀 돌파 진입", 2),
+            ]
+        },
+    )
+
+    assert "흐름평가: 셋업 후 돌파 · 양호 · 점수영향 +5" in text
+    assert "흐름행동: 돌파 유지와 거래량 지속 확인" in text
+
+
+def test_format_scan_report_applies_negative_label_flow_adjustment_to_score():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:437730",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=60000,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_scan_report(
+        outcomes=[outcome],
+        errors=[],
+        scanned=["KRX:437730"],
+        label_flows={
+            "KRX:437730": [
+                TradingViewLabelFlowItem("2026-05-20", "💰 진입", 1),
+                TradingViewLabelFlowItem("2026-05-21", "⚠️ 8선 이탈", 2),
+                TradingViewLabelFlowItem("2026-05-22", "💰 진입", 3),
+                TradingViewLabelFlowItem("2026-05-23", "💣 돌파 청산", 4),
+                TradingViewLabelFlowItem("2026-05-24", "🛠️ 셋업 형성 중", 5),
+                TradingViewLabelFlowItem("2026-05-25", "🚀 돌파 진입", 6),
+            ]
+        },
+    )
+
+    assert "1. KRX:437730 · 삼현 · 기술점수 92점" in text
+    assert "흐름평가: 휩쏘 후 재돌파 · 위험 · 점수영향 -8" in text
 
 
 def test_format_scan_report_includes_lazy_alpha_table_score_when_available():

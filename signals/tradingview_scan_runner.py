@@ -21,6 +21,7 @@ from signals.tradingview_direct import (
     TradingViewTableSnapshot,
     classify_priority_risks,
     evaluate_lazy_alpha_state,
+    interpret_lazy_alpha_flow,
     map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
@@ -197,6 +198,7 @@ def format_scan_report(
     enrichments: dict[str, KrSignalEnrichment] | None = None,
     exclusions: list[TradingViewExcludedSignal] | None = None,
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
+    label_flows: dict[str, list[TradingViewLabelFlowItem]] | None = None,
     include_exclusions: bool = True,
     requested_count: int | None = None,
     batch_count: int | None = None,
@@ -227,6 +229,7 @@ def format_scan_report(
             sorted(outcomes, key=priority_sort_key),
             enrichments=enrichments,
             table_snapshots=table_snapshots,
+            label_flows=label_flows,
         )
     )
     if include_exclusions and current_exclusions:
@@ -277,6 +280,7 @@ def format_telegram_outcome_cards(
     ticker_cache: list[dict] | None = None,
     enrichments: dict[str, KrSignalEnrichment] | None = None,
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
+    label_flows: dict[str, list[TradingViewLabelFlowItem]] | None = None,
 ) -> list[str]:
     if not outcomes:
         return [
@@ -289,7 +293,7 @@ def format_telegram_outcome_cards(
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
     ordered_outcomes = sorted(
         outcomes,
-        key=lambda row: _card_sort_key(row, enrichments or {}),
+        key=lambda row: _card_sort_key(row, enrichments or {}, label_flows or {}),
     )
     lines = [f"활성 매수 후보: {len(ordered_outcomes)}건"]
     for index, item in enumerate(ordered_outcomes, start=1):
@@ -297,7 +301,9 @@ def format_telegram_outcome_cards(
         combined_risks = [*item.risk_flags, *priority_risks]
         risk = "없음" if not combined_risks else ", ".join(combined_risks)
         adjusted_penalty = adjusted_priority_penalty(item)
-        score = max(0, 100 - adjusted_penalty)
+        interpretation = interpret_lazy_alpha_flow((label_flows or {}).get(item.symbol, []))
+        flow_adjustment = interpretation.score_adjustment if interpretation else 0
+        score = max(0, min(100, 100 - adjusted_penalty + flow_adjustment))
         status = "매수 후보 유지" if adjusted_penalty == 0 else f"주의 필요 · 감점 {adjusted_penalty}"
         price_unit = "원" if item.market == "KR" else ""
         table = (table_snapshots or {}).get(item.symbol)
@@ -341,6 +347,17 @@ def format_telegram_outcome_cards(
                 lines.append("수급리스크: " + " · ".join(enrichment.supply_score.risks[:2]))
         if table:
             lines.extend(format_lazy_alpha_table_card_lines(table))
+        if interpretation:
+            lines.extend(
+                [
+                    (
+                        "흐름평가: "
+                        f"{interpretation.pattern} · {interpretation.confidence} · "
+                        f"점수영향 {interpretation.score_adjustment:+d}"
+                    ),
+                    f"흐름행동: {interpretation.action}",
+                ]
+            )
         if item.failure_class:
             lines.append(f"실패분류: {item.failure_class}")
     return lines
@@ -349,8 +366,11 @@ def format_telegram_outcome_cards(
 def _card_sort_key(
     item: TradingViewLabelOutcome,
     enrichments: dict[str, KrSignalEnrichment],
+    label_flows: dict[str, list[TradingViewLabelFlowItem]],
 ) -> tuple[int, int, str]:
-    technical_score = max(0, 100 - adjusted_priority_penalty(item))
+    interpretation = interpret_lazy_alpha_flow(label_flows.get(item.symbol, []))
+    flow_adjustment = interpretation.score_adjustment if interpretation else 0
+    technical_score = max(0, min(100, 100 - adjusted_priority_penalty(item) + flow_adjustment))
     enrichment = enrichments.get(item.symbol)
     if enrichment:
         return (-_composite_signal_score(technical_score, enrichment.supply_score.score), adjusted_priority_penalty(item), item.symbol)

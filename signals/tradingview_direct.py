@@ -52,6 +52,9 @@ class TradingViewFlowInterpretation:
     summary: str
     risk: str
     action: str
+    pattern: str
+    score_adjustment: int
+    confidence: str
 
 
 @dataclass(frozen=True)
@@ -390,13 +393,53 @@ def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingVi
         risk = "최근 청산/이탈 이력 1회"
     else:
         risk = "최근 청산/이탈 라벨 없음"
+    pattern, score_adjustment, confidence = _flow_pattern_score(
+        events=events,
+        latest=latest,
+        exit_count=exit_count,
+        has_setup=has_setup,
+        has_breakout=has_breakout,
+        has_entry_after_exit=has_entry_after_exit,
+    )
 
     return TradingViewFlowInterpretation(
         stage=stage,
         summary=summary,
         risk=risk,
         action=action,
+        pattern=pattern,
+        score_adjustment=score_adjustment,
+        confidence=confidence,
     )
+
+
+def _flow_pattern_score(
+    *,
+    events: list[str],
+    latest: str,
+    exit_count: int,
+    has_setup: bool,
+    has_breakout: bool,
+    has_entry_after_exit: bool,
+) -> tuple[str, int, str]:
+    entry_count = sum(1 for event in events if event in {"ENTRY", "BREAKOUT"})
+    if exit_count >= 2 and latest in {"ENTRY", "BREAKOUT"}:
+        return "휩쏘 후 재돌파", -8, "위험"
+    if exit_count >= 2 and latest == "ADD":
+        return "청산 후 재진입 추매", -6, "주의"
+    if latest == "ADD" and entry_count >= 2:
+        return "추매 과열 가능", -5, "주의"
+    if has_setup and has_breakout and exit_count == 0:
+        return "셋업 후 돌파", 5, "양호"
+    if has_entry_after_exit:
+        return "청산 후 재진입", -3, "주의"
+    if latest in {"EXIT", "WHIPSAW"}:
+        return "무효화 진행", -10, "위험"
+    if latest in {"ENTRY", "BREAKOUT"}:
+        return "신규 진입", 2, "보통"
+    if latest == "SETUP":
+        return "셋업 대기", 0, "관찰"
+    return "관찰", 0, "관찰"
 
 
 def parse_lazy_alpha_tables(payload: dict) -> TradingViewTableSnapshot | None:
