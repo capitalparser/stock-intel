@@ -415,6 +415,22 @@ def test_interpret_lazy_alpha_flow_penalizes_repeated_whipsaw_sequence():
     assert "청산/이탈 2회" in interpretation.risk
 
 
+def test_interpret_lazy_alpha_flow_flags_immediate_reentry_after_exit():
+    flow = [
+        TradingViewLabelFlowItem("2026-05-22", "💣 돌파 청산", 10),
+        TradingViewLabelFlowItem("2026-05-23", "🛠️ 셋업 형성 중", 11),
+        TradingViewLabelFlowItem("2026-05-24", "🚀 돌파 진입", 12),
+    ]
+
+    interpretation = interpret_lazy_alpha_flow(flow)
+
+    assert interpretation.pattern == "즉시 재진입 휩쏘 위험"
+    assert interpretation.score_adjustment == -12
+    assert interpretation.confidence == "위험"
+    assert "2봉 내 청산 후 재진입" in interpretation.risk
+    assert "신규 진입 보류" in interpretation.action
+
+
 def test_parse_lazy_alpha_tables_extracts_score_and_risk_reward_metrics():
     payload = {
         "success": True,

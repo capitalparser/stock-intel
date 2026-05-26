@@ -469,7 +469,8 @@ def recommend_signal_candidates(
         if interpretation and interpretation.score_adjustment > 0:
             base_score += min(5, interpretation.score_adjustment)
         recommendation_score = max(0, min(100, round(base_score - reflection_penalty)))
-        risks = [*reflection_risks, *outcome.risk_flags, *table_risks]
+        flow_risks = _flow_recommendation_risks(interpretation)
+        risks = [*reflection_risks, *outcome.risk_flags, *table_risks, *flow_risks]
         evidence = _recommendation_evidence(
             outcome=outcome,
             enrichment=enrichment,
@@ -912,6 +913,8 @@ def _recommendation_state(score: int, reflection_penalty: int, risks: list[str])
 
 
 def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[str]) -> str:
+    if any("휩쏘" in risk for risk in risks):
+        return "신규 진입 보류, 재돌파 유지와 무효화 라벨 재발 여부 확인"
     if any("Lazy 테이블" in risk or "매수 자격 미충족" in risk for risk in risks):
         return "신규 진입 보류, Lazy 테이블 회복 또는 재셋업 라벨 대기"
     if any("시세 반영 과도" in risk or "과확장" in risk for risk in risks):
@@ -919,6 +922,19 @@ def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[st
     if "피라미딩" in outcome.label:
         return "기존 보유 관점이면 추매 조건과 손절폭 재확인"
     return "분할 진입 가능성 검토 및 독립성/손절선 확인"
+
+
+def _flow_recommendation_risks(interpretation) -> list[str]:
+    if interpretation is None:
+        return []
+    risks: list[str] = []
+    if interpretation.confidence == "위험":
+        risks.append(interpretation.pattern)
+    elif interpretation.confidence == "주의" and interpretation.score_adjustment < 0:
+        risks.append(interpretation.pattern)
+    if "휩쏘" in interpretation.risk and interpretation.risk not in risks:
+        risks.append(interpretation.risk)
+    return risks
 
 
 def _recommendation_evidence(

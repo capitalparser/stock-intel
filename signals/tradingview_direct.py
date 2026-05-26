@@ -354,8 +354,12 @@ def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingVi
     has_breakout = "BREAKOUT" in events
     has_add = latest == "ADD"
     has_entry_after_exit = _has_entry_after_exit(events)
+    immediate_reentry_bars = _immediate_reentry_bars(flow, events) if exit_count == 1 else None
 
-    if latest == "ADD":
+    if immediate_reentry_bars is not None:
+        stage = "즉시 재진입"
+        action = "신규 진입 보류, 재돌파 유지와 무효화 라벨 재발 여부 확인"
+    elif latest == "ADD":
         stage = "재진입 후 추매 단계" if has_entry_after_exit else "추매 단계"
         action = "신규 추격보다 눌림/손절선 기준 확인"
     elif latest == "BREAKOUT":
@@ -387,7 +391,9 @@ def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingVi
         summary_parts.append("청산 후 재진입")
     summary = " · ".join(summary_parts) if summary_parts else "주요 전환 라벨 확인"
 
-    if exit_count >= 2:
+    if immediate_reentry_bars is not None:
+        risk = f"{immediate_reentry_bars}봉 내 청산 후 재진입, 휩쏘 재발 주의"
+    elif exit_count >= 2:
         risk = f"청산/이탈 {exit_count}회로 휩쏘 이력 주의"
     elif exit_count == 1:
         risk = "최근 청산/이탈 이력 1회"
@@ -400,6 +406,7 @@ def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingVi
         has_setup=has_setup,
         has_breakout=has_breakout,
         has_entry_after_exit=has_entry_after_exit,
+        immediate_reentry_bars=immediate_reentry_bars,
     )
 
     return TradingViewFlowInterpretation(
@@ -421,8 +428,11 @@ def _flow_pattern_score(
     has_setup: bool,
     has_breakout: bool,
     has_entry_after_exit: bool,
+    immediate_reentry_bars: int | None = None,
 ) -> tuple[str, int, str]:
     entry_count = sum(1 for event in events if event in {"ENTRY", "BREAKOUT"})
+    if immediate_reentry_bars is not None:
+        return "즉시 재진입 휩쏘 위험", -12, "위험"
     if exit_count >= 2 and latest in {"ENTRY", "BREAKOUT"}:
         return "휩쏘 후 재돌파", -8, "위험"
     if exit_count >= 2 and latest == "ADD":
@@ -440,6 +450,25 @@ def _flow_pattern_score(
     if latest == "SETUP":
         return "셋업 대기", 0, "관찰"
     return "관찰", 0, "관찰"
+
+
+def _immediate_reentry_bars(
+    flow: list[TradingViewLabelFlowItem],
+    events: list[str],
+    *,
+    max_bars: int = 3,
+) -> int | None:
+    last_exit_index: int | None = None
+    for index, event in enumerate(events):
+        if event in {"EXIT", "WHIPSAW"}:
+            last_exit_index = index
+            continue
+        if last_exit_index is None or event not in {"ENTRY", "BREAKOUT", "ADD"}:
+            continue
+        bars = flow[index].bar_index - flow[last_exit_index].bar_index
+        if 0 < bars <= max_bars:
+            return bars
+    return None
 
 
 def parse_lazy_alpha_tables(payload: dict) -> TradingViewTableSnapshot | None:

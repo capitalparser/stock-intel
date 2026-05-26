@@ -814,6 +814,39 @@ def test_recommend_signal_candidates_penalizes_bearish_lazy_table():
     assert "진입 보류" in recommendations[0].next_action
 
 
+def test_recommend_signal_candidates_penalizes_immediate_reentry_flow():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:321370",
+        market="KR",
+        signal_date="2026-05-24",
+        first_signal_date="2026-05-24",
+        last_signal_date="2026-05-24",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=3975,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    recommendations = recommend_signal_candidates(
+        [outcome],
+        label_flows={
+            "KRX:321370": [
+                TradingViewLabelFlowItem("2026-05-22", "💣 돌파 청산", 10),
+                TradingViewLabelFlowItem("2026-05-23", "🛠️ 셋업 형성 중", 11),
+                TradingViewLabelFlowItem("2026-05-24", "🚀 돌파 진입", 12),
+            ]
+        },
+    )
+
+    assert recommendations[0].technical_score == 88
+    assert recommendations[0].flow_adjustment == -12
+    assert "즉시 재진입 휩쏘 위험" in recommendations[0].risks
+    assert "진입 보류" in recommendations[0].next_action
+
+
 def test_format_recommendation_report_is_actionable_telegram_card():
     outcome = TradingViewLabelOutcome(
         symbol="KRX:103590",
