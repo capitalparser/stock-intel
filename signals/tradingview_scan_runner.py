@@ -16,10 +16,12 @@ from signals.tradingview_direct import (
     TradingViewExcludedSignal,
     TradingViewLabelFlowItem,
     TradingViewLabelOutcome,
+    TradingViewTableSnapshot,
     classify_priority_risks,
     map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
+    parse_lazy_alpha_tables,
 )
 from utils.ticker import load_ticker_cache
 
@@ -36,6 +38,7 @@ class TradingViewScanResult:
     errors: list[tuple[str, str]]
     scanned: list[str]
     label_flows: dict[str, list[TradingViewLabelFlowItem]]
+    table_snapshots: dict[str, TradingViewTableSnapshot | None]
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ def scan_tradingview_symbols(
     errors: list[tuple[str, str]] = []
     scanned: list[str] = []
     label_flows: dict[str, list[TradingViewLabelFlowItem]] = {}
+    table_snapshots: dict[str, TradingViewTableSnapshot | None] = {}
     for symbol in symbols:
         try:
             cli.run(["symbol", symbol])
@@ -87,6 +91,11 @@ def scan_tradingview_symbols(
             time.sleep(sleep_seconds)
             ohlcv = cli.run(["ohlcv", "-n", str(bars)])
             labels = cli.run(["data", "labels", "--filter", "Lazy", "--max", str(max_labels), "--verbose"])
+            try:
+                tables = cli.run(["data", "tables", "--filter", "Lazy"])
+                table_snapshots[symbol] = parse_lazy_alpha_tables(tables)
+            except Exception:  # pragma: no cover - optional TradingView table boundary
+                table_snapshots[symbol] = None
             study_labels = [
                 label
                 for study in labels.get("studies", [])
@@ -133,6 +142,7 @@ def scan_tradingview_symbols(
         errors=errors,
         scanned=scanned,
         label_flows=label_flows,
+        table_snapshots=table_snapshots,
     )
 
 
@@ -180,6 +190,7 @@ def format_scan_report(
     title: str = "📡 TradingView 직접 스캔",
     enrichments: dict[str, KrSignalEnrichment] | None = None,
     exclusions: list[TradingViewExcludedSignal] | None = None,
+    table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     include_exclusions: bool = True,
 ) -> str:
     exclusion_count = len(exclusions or [])
@@ -201,6 +212,7 @@ def format_scan_report(
         format_telegram_outcome_cards(
             sorted(outcomes, key=priority_sort_key),
             enrichments=enrichments,
+            table_snapshots=table_snapshots,
         )
     )
     if include_exclusions and exclusions:
@@ -234,6 +246,7 @@ def format_telegram_outcome_cards(
     *,
     ticker_cache: list[dict] | None = None,
     enrichments: dict[str, KrSignalEnrichment] | None = None,
+    table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
 ) -> list[str]:
     if not outcomes:
         return [
@@ -272,8 +285,33 @@ def format_telegram_outcome_cards(
                     f"실적/밸류: {enrichment.fundamental}",
                 ]
             )
+        table = (table_snapshots or {}).get(item.symbol)
+        if table:
+            lines.extend(format_lazy_alpha_table_card_lines(table))
         if item.failure_class:
             lines.append(f"실패분류: {item.failure_class}")
+    return lines
+
+
+def format_lazy_alpha_table_card_lines(table: TradingViewTableSnapshot) -> list[str]:
+    lines: list[str] = []
+    if table.aux_score is not None or table.conviction:
+        score = f"{table.aux_score}점" if table.aux_score is not None else "-"
+        lines.append(f"Lazy 원점수: {score} · 확신 {table.conviction or '-'}")
+    status_parts = [part for part in [table.signal, table.buy_eligibility] if part]
+    if status_parts:
+        lines.append("Lazy 상태: " + " · ".join(status_parts))
+    evidence_parts = []
+    if table.aux_signal:
+        evidence_parts.append(table.aux_signal)
+    if table.rs_score is not None:
+        evidence_parts.append(f"RS {table.rs_score}점")
+    if table.volume_strength is not None:
+        evidence_parts.append(f"거래량 {table.volume_strength:g}배")
+    if table.stop_loss is not None:
+        evidence_parts.append(f"SL {_fmt_price(table.stop_loss)} ({_fmt_signed_pct(table.stop_loss_pct)})")
+    if evidence_parts:
+        lines.append("Lazy 근거: " + " · ".join(evidence_parts))
     return lines
 
 
@@ -421,3 +459,9 @@ def _fmt_pct(value: float | None) -> str:
         return "-"
     sign = "+" if value > 0 else ""
     return f"{sign}{value:.2f}%"
+
+
+def _fmt_signed_pct(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:+g}%"

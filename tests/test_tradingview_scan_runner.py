@@ -12,7 +12,7 @@ from signals.tradingview_scan_runner import (
     symbol_display_name,
     symbols_from_universe,
 )
-from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome
+from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome, TradingViewTableSnapshot
 
 
 def test_normalize_scan_symbol_adds_default_exchange_prefixes():
@@ -85,6 +85,58 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "시그널: 2026-04-24 · 💰 진입" in text
     assert "신호 기준가: 271" in text
     assert "이후 흐름:" not in text
+
+
+def test_format_scan_report_includes_lazy_alpha_table_score_when_available():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:321370",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🔼 피라미딩 추매 1 (50%)",
+        entry_price=3975,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    snapshot = TradingViewTableSnapshot(
+        signal="🟢 포지션 보유",
+        conviction="🟣 S (최고)",
+        smart_eval="🍯 꿀통 눌림목 / 21 EMA 지지 (매수 적기)",
+        ema_alignment="🟢 정배열 (유지)",
+        aux_score=60,
+        aux_signal="수급 PB",
+        market_sector="📈 강세 정렬",
+        trend_energy=None,
+        market_control=None,
+        rs_score=99,
+        volume_strength=2.1,
+        high_52w_pct=-23.1,
+        stop_loss=3495,
+        stop_loss_pct=-12.1,
+        target_price=None,
+        target_return_pct=None,
+        risk_reward=None,
+        buy_eligibility="🟢 적합 (조건 충족)",
+        fundamental=None,
+        eps_growth=[],
+        sales_growth=[],
+        raw_rows=[],
+    )
+
+    text = format_scan_report(
+        outcomes=[outcome],
+        errors=[],
+        scanned=["KRX:321370"],
+        table_snapshots={"KRX:321370": snapshot},
+    )
+
+    assert "Lazy 원점수: 60점 · 확신 🟣 S (최고)" in text
+    assert "Lazy 상태: 🟢 포지션 보유 · 🟢 적합 (조건 충족)" in text
+    assert "Lazy 근거: 수급 PB · RS 99점 · 거래량 2.1배 · SL 3,495 (-12.1%)" in text
 
 
 def test_format_scan_report_includes_exclusion_reason_cards():

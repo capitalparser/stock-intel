@@ -9,6 +9,7 @@ from signals.tradingview_direct import (
     map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
+    parse_lazy_alpha_tables,
 )
 
 
@@ -315,6 +316,66 @@ def test_interpret_lazy_alpha_flow_summarizes_stage_risk_and_action():
     assert "셋업 후 돌파 진입" in interpretation.summary
     assert "청산/이탈 2회" in interpretation.risk
     assert "신규 추격보다 눌림" in interpretation.action
+
+
+def test_parse_lazy_alpha_tables_extracts_score_and_risk_reward_metrics():
+    payload = {
+        "success": True,
+        "studies": [
+            {
+                "name": "Lazy Alpha indicator",
+                "tables": [
+                    {
+                        "rows": [
+                            "시그널 | 🟢 포지션 보유",
+                            "확신 등급 | 🟢 A (강한)",
+                            "SMART 평가 | 📈 안정적 우상향\n편안한 추세 (홀딩)",
+                            "EMA 정렬 | 🟢 정배열 (유지)",
+                            "보조 신호 | 🟢 70점 | 돌파 W패턴 BO ",
+                            "시장/섹터 | 📈 강세 정렬",
+                            "추세 에너지 | 🔥 상승 가속 (23.4)",
+                            "시장 주도권 | 🐂 매수세 (🔥강력)",
+                            "상대 강도(RS) | 99점",
+                            "거래량 강도 | 2.1배",
+                            "52주 고점% | -9.1%",
+                            "손절 관리(SL) | 59300 (-10.1%)",
+                            "목표 수익(TP1) | 85900 (+30.1%)",
+                            "실시간 손익비 | 1 : 3.1 (👍 좋음)",
+                            "매수 자격 | 🟢 적합 (조건 충족)",
+                            "펀더멘털 | 🌤️ 펀더멘털: 우수 (Good)",
+                        ]
+                    },
+                    {
+                        "rows": [
+                            "성장 | 이번 | 직전 | 전전",
+                            "EPS | 82.5% | -18.1% | -31.0%",
+                            "Sales | 13.2% | 6.9% | 5.3%",
+                        ]
+                    },
+                ],
+            }
+        ],
+    }
+
+    snapshot = parse_lazy_alpha_tables(payload)
+
+    assert snapshot is not None
+    assert snapshot.signal == "🟢 포지션 보유"
+    assert snapshot.conviction == "🟢 A (강한)"
+    assert snapshot.smart_eval == "📈 안정적 우상향 / 편안한 추세 (홀딩)"
+    assert snapshot.aux_score == 70
+    assert snapshot.aux_signal == "돌파 W패턴 BO"
+    assert snapshot.rs_score == 99
+    assert snapshot.volume_strength == 2.1
+    assert snapshot.high_52w_pct == -9.1
+    assert snapshot.stop_loss == 59300
+    assert snapshot.stop_loss_pct == -10.1
+    assert snapshot.target_price == 85900
+    assert snapshot.target_return_pct == 30.1
+    assert snapshot.risk_reward == "1 : 3.1 (👍 좋음)"
+    assert snapshot.buy_eligibility == "🟢 적합 (조건 충족)"
+    assert snapshot.eps_growth == ["82.5%", "-18.1%", "-31.0%"]
+    assert snapshot.sales_growth == ["13.2%", "6.9%", "5.3%"]
 
 
 def test_classify_lazy_alpha_failure_separates_common_failure_modes():

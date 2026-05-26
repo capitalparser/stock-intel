@@ -56,7 +56,7 @@ from signals.leading_discovery import (
     score_leading_candidate,
 )
 from signals.market import Market
-from signals.tradingview_direct import interpret_lazy_alpha_flow
+from signals.tradingview_direct import TradingViewTableSnapshot, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
     adjusted_priority_penalty,
@@ -246,6 +246,11 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         )
     if result.errors:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in result.errors[:3]))
+    table_lines = _format_lazy_alpha_table(
+        getattr(result, "table_snapshots", {}).get(normalize_scan_symbol(symbol))
+    )
+    if table_lines:
+        lines.extend(["", "Lazy 테이블", *table_lines])
     flow_lines = _format_label_flow(
         getattr(result, "label_flows", {}).get(normalize_scan_symbol(symbol), [])
     )
@@ -282,12 +287,58 @@ def _format_label_flow(flow_items) -> list[str]:
     return [f"{item.date}  {_compact_label(item.label)}" for item in flow_items]
 
 
+def _format_lazy_alpha_table(snapshot: TradingViewTableSnapshot | None) -> list[str]:
+    if snapshot is None:
+        return []
+    lines: list[str] = []
+    if snapshot.aux_score is not None or snapshot.conviction:
+        score = f"{snapshot.aux_score}점" if snapshot.aux_score is not None else "-"
+        conviction = snapshot.conviction or "-"
+        lines.append(f"Lazy 점수: {score} · 확신 {conviction}")
+    status_parts = [part for part in [snapshot.signal, snapshot.buy_eligibility] if part]
+    if status_parts:
+        lines.append("상태: " + " · ".join(status_parts))
+    trend_parts = []
+    if snapshot.ema_alignment:
+        trend_parts.append(snapshot.ema_alignment)
+    if snapshot.rs_score is not None:
+        trend_parts.append(f"RS {snapshot.rs_score}점")
+    if snapshot.volume_strength is not None:
+        trend_parts.append(f"거래량 {snapshot.volume_strength:g}배")
+    if snapshot.high_52w_pct is not None:
+        trend_parts.append(f"52주고점 {snapshot.high_52w_pct:+g}%")
+    if trend_parts:
+        lines.append("추세: " + " · ".join(trend_parts))
+    risk_parts = []
+    if snapshot.stop_loss is not None:
+        risk_parts.append(f"SL {_fmt_scan_price(snapshot.stop_loss)} ({_fmt_signed_pct(snapshot.stop_loss_pct)})")
+    if snapshot.target_price is not None:
+        risk_parts.append(f"TP1 {_fmt_scan_price(snapshot.target_price)} ({_fmt_signed_pct(snapshot.target_return_pct)})")
+    if snapshot.risk_reward:
+        risk_parts.append(f"R/R {snapshot.risk_reward}")
+    if risk_parts:
+        lines.append("리스크/보상: " + " · ".join(risk_parts))
+    if snapshot.aux_signal:
+        lines.append(f"보조 신호: {snapshot.aux_signal}")
+    if snapshot.smart_eval:
+        lines.append(f"평가: {snapshot.smart_eval}")
+    if snapshot.fundamental:
+        lines.append(f"펀더멘털: {snapshot.fundamental}")
+    return lines
+
+
 def _compact_label(text: str) -> str:
     return " / ".join(part.strip() for part in text.splitlines() if part.strip()) or "-"
 
 
 def _fmt_scan_price(value: float) -> str:
     return f"{value:,.0f}" if value >= 100 else f"{value:.2f}"
+
+
+def _fmt_signed_pct(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:+g}%"
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +492,7 @@ def render_tradingview_scan(args: list[str]) -> str:
         errors=result.errors,
         scanned=result.scanned,
         enrichments=enrichments,
+        table_snapshots=result.table_snapshots,
         title=options["title"],
         include_exclusions=options["include_exclusions"],
     )

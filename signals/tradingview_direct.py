@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from collections import Counter
@@ -51,6 +52,32 @@ class TradingViewFlowInterpretation:
     summary: str
     risk: str
     action: str
+
+
+@dataclass(frozen=True)
+class TradingViewTableSnapshot:
+    signal: str | None
+    conviction: str | None
+    smart_eval: str | None
+    ema_alignment: str | None
+    aux_score: int | None
+    aux_signal: str | None
+    market_sector: str | None
+    trend_energy: str | None
+    market_control: str | None
+    rs_score: int | None
+    volume_strength: float | None
+    high_52w_pct: float | None
+    stop_loss: float | None
+    stop_loss_pct: float | None
+    target_price: float | None
+    target_return_pct: float | None
+    risk_reward: str | None
+    buy_eligibility: str | None
+    fundamental: str | None
+    eps_growth: list[str]
+    sales_growth: list[str]
+    raw_rows: list[str]
 
 
 BUY_LABEL_KEYWORDS = (
@@ -350,6 +377,64 @@ def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingVi
     )
 
 
+def parse_lazy_alpha_tables(payload: dict) -> TradingViewTableSnapshot | None:
+    rows = [
+        str(row)
+        for study in payload.get("studies", [])
+        if "Lazy" in str(study.get("name", ""))
+        for table in study.get("tables", [])
+        for row in table.get("rows", [])
+    ]
+    if not rows:
+        return None
+
+    values: dict[str, str] = {}
+    eps_growth: list[str] = []
+    sales_growth: list[str] = []
+    for row in rows:
+        parts = [part.strip() for part in row.split("|")]
+        if len(parts) < 2:
+            continue
+        key = parts[0]
+        value = " | ".join(part for part in parts[1:] if part)
+        value = _normalize_table_value(value)
+        if key == "EPS":
+            eps_growth = [_normalize_table_value(part) for part in parts[1:] if part.strip()]
+            continue
+        if key == "Sales":
+            sales_growth = [_normalize_table_value(part) for part in parts[1:] if part.strip()]
+            continue
+        values[key] = value
+
+    aux_score, aux_signal = _parse_aux_signal(values.get("보조 신호"))
+    stop_loss, stop_loss_pct = _parse_price_pct(values.get("손절 관리(SL)"))
+    target_price, target_return_pct = _parse_price_pct(values.get("목표 수익(TP1)"))
+    return TradingViewTableSnapshot(
+        signal=values.get("시그널"),
+        conviction=values.get("확신 등급"),
+        smart_eval=values.get("SMART 평가"),
+        ema_alignment=values.get("EMA 정렬"),
+        aux_score=aux_score,
+        aux_signal=aux_signal,
+        market_sector=values.get("시장/섹터"),
+        trend_energy=values.get("추세 에너지"),
+        market_control=values.get("시장 주도권"),
+        rs_score=_parse_int(values.get("상대 강도(RS)")),
+        volume_strength=_parse_float(values.get("거래량 강도")),
+        high_52w_pct=_parse_float(values.get("52주 고점%")),
+        stop_loss=stop_loss,
+        stop_loss_pct=stop_loss_pct,
+        target_price=target_price,
+        target_return_pct=target_return_pct,
+        risk_reward=values.get("실시간 손익비"),
+        buy_eligibility=values.get("매수 자격"),
+        fundamental=values.get("펀더멘털"),
+        eps_growth=eps_growth,
+        sales_growth=sales_growth,
+        raw_rows=rows,
+    )
+
+
 def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:
     return any(exit_bar_index > last_entry_bar_index for exit_bar_index in exit_bar_indexes)
 
@@ -399,6 +484,42 @@ def _has_entry_after_exit(events: list[str]) -> bool:
         elif seen_exit and event in {"ENTRY", "BREAKOUT", "ADD"}:
             return True
     return False
+
+
+def _normalize_table_value(value: str) -> str:
+    return " / ".join(part.strip() for part in value.splitlines() if part.strip())
+
+
+def _parse_aux_signal(value: str | None) -> tuple[int | None, str | None]:
+    if not value:
+        return None, None
+    score = _parse_int(value)
+    parts = [part.strip() for part in value.split("|") if part.strip()]
+    signal = parts[-1] if len(parts) >= 2 else None
+    return score, signal
+
+
+def _parse_price_pct(value: str | None) -> tuple[float | None, float | None]:
+    if not value:
+        return None, None
+    numbers = re.findall(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?", value)
+    price = _parse_float(numbers[0]) if numbers else None
+    pct = _parse_float(numbers[1]) if len(numbers) > 1 else None
+    return price, pct
+
+
+def _parse_int(value: str | None) -> int | None:
+    parsed = _parse_float(value)
+    return None if parsed is None else int(parsed)
+
+
+def _parse_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    match = re.search(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?", value)
+    if not match:
+        return None
+    return float(match.group(0).replace(",", ""))
 
 
 def _cluster_candidates(

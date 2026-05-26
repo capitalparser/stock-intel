@@ -8,6 +8,7 @@ from signals.tradingview_direct import (
     TradingViewExcludedSignal,
     TradingViewLabelFlowItem,
     TradingViewLabelOutcome,
+    TradingViewTableSnapshot,
 )
 from signals.payload import TradingViewSignal
 from signals.storage import SignalStore
@@ -93,6 +94,32 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
                     TradingViewLabelFlowItem("2026-05-20", "💰 진입", 95),
                 ]
             },
+            table_snapshots={
+                "KRX:103590": TradingViewTableSnapshot(
+                    signal="🟢 포지션 보유",
+                    conviction="🟢 A (강한)",
+                    smart_eval="📈 안정적 우상향 / 편안한 추세 (홀딩)",
+                    ema_alignment="🟢 정배열 (유지)",
+                    aux_score=70,
+                    aux_signal="돌파 W패턴 BO",
+                    market_sector="📈 강세 정렬",
+                    trend_energy="🔥 상승 가속 (23.4)",
+                    market_control="🐂 매수세 (🔥강력)",
+                    rs_score=99,
+                    volume_strength=2.1,
+                    high_52w_pct=-9.1,
+                    stop_loss=59300,
+                    stop_loss_pct=-10.1,
+                    target_price=85900,
+                    target_return_pct=30.1,
+                    risk_reward="1 : 3.1 (👍 좋음)",
+                    buy_eligibility="🟢 적합 (조건 충족)",
+                    fundamental="🌤️ 펀더멘털: 우수 (Good)",
+                    eps_growth=["82.5%", "-18.1%", "-31.0%"],
+                    sales_growth=["13.2%", "6.9%", "5.3%"],
+                    raw_rows=[],
+                )
+            },
         ),
     )
 
@@ -107,6 +134,9 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     assert "라벨 해석" in text
     assert "단계: 초기 진입" in text
     assert "행동: 초기 진입 후보" in text
+    assert "Lazy 테이블" in text
+    assert "Lazy 점수: 70점 · 확신 🟢 A (강한)" in text
+    assert "리스크/보상: SL 59,300 (-10.1%) · TP1 85,900 (+30.1%) · R/R 1 : 3.1 (👍 좋음)" in text
 
 
 def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(monkeypatch):
