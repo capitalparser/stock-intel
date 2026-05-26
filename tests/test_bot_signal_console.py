@@ -130,6 +130,21 @@ def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(
     assert "2025-12-15" not in text
 
 
+def test_render_lazy_alpha_status_scans_single_symbol_with_latest_cluster_policy(monkeypatch):
+    captured = {}
+
+    def fake_scan(symbols, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=symbols)
+
+    monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
+
+    bot.render_lazy_alpha_status_for_symbol("KRX:321370")
+
+    assert captured["entry_policy"] == "last"
+    assert captured["duplicate_window_bars"] == 5
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",

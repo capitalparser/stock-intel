@@ -201,6 +201,8 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
             bars=500,
             max_labels=250,
             timeframe="D",
+            duplicate_window_bars=5,
+            entry_policy="last",
             sleep_seconds=float(os.getenv("TRADINGVIEW_SINGLE_SCAN_SLEEP", "1.2")),
         )
     except Exception as exc:
