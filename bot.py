@@ -225,10 +225,21 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
             penalty=penalty,
         )
         price_unit = "원" if item.market == "KR" else ""
+        score_parts = [f"기술 {score}점"]
+        if table and table.aux_score is not None:
+            score_parts.append(f"Lazy {table.aux_score}점")
+        if table and table.conviction:
+            score_parts.append(f"확신 {table.conviction}")
         lines.extend(
             [
+                "",
+                "핵심 요약",
                 f"최종판정: {decision.verdict} · {decision.reason}",
-                f"행동: {decision.action}",
+                f"다음 행동: {decision.action}",
+                f"최근 신호: {item.signal_date} · {_compact_label(item.label)}",
+                "점수: " + " · ".join(score_parts),
+                "",
+                "상세 근거",
                 f"판정: {status}",
                 f"기술점수: {score}점",
                 f"시그널: {item.signal_date} · {_compact_label(item.label)}",
@@ -253,16 +264,35 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         )
         lines.extend(
             [
+                "",
+                "핵심 요약",
                 f"최종판정: {decision.verdict} · {decision.reason}",
-                f"행동: {decision.action}",
+                f"다음 행동: {decision.action}",
+                f"최근 신호: {exit_date} · {_compact_label(item.exit_label)}",
+                f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
+                "",
+                "상세 근거",
                 "판정: 매수 후보 아님",
                 f"사유: {exit_date} · {_compact_label(item.exit_label)}",
                 f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
             ]
         )
     else:
+        decision = evaluate_lazy_alpha_state(
+            table_signal=table.signal if table else None,
+            table_conviction=table.conviction if table else None,
+            table_buy_eligibility=table.buy_eligibility if table else None,
+            table_score=table.aux_score if table else None,
+        )
         lines.extend(
             [
+                "",
+                "핵심 요약",
+                f"최종판정: {decision.verdict} · {decision.reason}",
+                f"다음 행동: {decision.action}",
+                "최근 신호: 없음",
+                "",
+                "상세 근거",
                 "판정: 현재 매수 후보 아님",
                 "사유: Lazy Alpha 진입 라벨 없음",
             ]
