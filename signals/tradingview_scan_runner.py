@@ -304,17 +304,45 @@ def format_lazy_alpha_table_card_lines(table: TradingViewTableSnapshot) -> list[
     status_parts = [part for part in [table.signal, table.buy_eligibility] if part]
     if status_parts:
         lines.append("Lazy 상태: " + " · ".join(status_parts))
+    trend_parts = []
+    if table.ema_alignment:
+        trend_parts.append(table.ema_alignment)
+    if table.rs_score is not None:
+        trend_parts.append(f"RS {table.rs_score}점")
+    if table.volume_strength is not None:
+        trend_parts.append(f"거래량 {table.volume_strength:g}배")
+    if table.high_52w_pct is not None:
+        trend_parts.append(f"52주고점 {table.high_52w_pct:+g}%")
+    if trend_parts:
+        lines.append("Lazy 추세: " + " · ".join(trend_parts))
     evidence_parts = []
     if table.aux_signal:
         evidence_parts.append(table.aux_signal)
-    if table.rs_score is not None:
-        evidence_parts.append(f"RS {table.rs_score}점")
-    if table.volume_strength is not None:
-        evidence_parts.append(f"거래량 {table.volume_strength:g}배")
-    if table.stop_loss is not None:
-        evidence_parts.append(f"SL {_fmt_price(table.stop_loss)} ({_fmt_signed_pct(table.stop_loss_pct)})")
+    if table.smart_eval:
+        evidence_parts.append(table.smart_eval)
     if evidence_parts:
         lines.append("Lazy 근거: " + " · ".join(evidence_parts))
+    market_parts = [part for part in [table.market_sector, table.trend_energy, table.market_control] if part]
+    if market_parts:
+        lines.append("Lazy 시장: " + " · ".join(market_parts))
+    risk_parts = []
+    if table.stop_loss is not None:
+        risk_parts.append(f"SL {_fmt_price(table.stop_loss)} ({_fmt_signed_pct(table.stop_loss_pct)})")
+    if table.target_price is not None:
+        risk_parts.append(f"TP1 {_fmt_price(table.target_price)} ({_fmt_signed_pct(table.target_return_pct)})")
+    if table.risk_reward:
+        risk_parts.append(f"R/R {table.risk_reward}")
+    if risk_parts:
+        lines.append("Lazy 리스크: " + " · ".join(risk_parts))
+    if table.fundamental:
+        lines.append(f"Lazy 펀더멘털: {table.fundamental}")
+    if table.eps_growth or table.sales_growth:
+        growth_parts = []
+        if table.eps_growth:
+            growth_parts.append("EPS " + " / ".join(table.eps_growth))
+        if table.sales_growth:
+            growth_parts.append("Sales " + " / ".join(table.sales_growth))
+        lines.append("Lazy 성장: " + " · ".join(growth_parts))
     return lines
 
 

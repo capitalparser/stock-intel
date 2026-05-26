@@ -155,7 +155,10 @@ def test_format_scan_report_includes_lazy_alpha_table_score_when_available():
 
     assert "Lazy 원점수: 60점 · 확신 🟣 S (최고)" in text
     assert "Lazy 상태: 🟢 포지션 보유 · 🟢 적합 (조건 충족)" in text
-    assert "Lazy 근거: 수급 PB · RS 99점 · 거래량 2.1배 · SL 3,495 (-12.1%)" in text
+    assert "Lazy 추세: 🟢 정배열 (유지) · RS 99점 · 거래량 2.1배 · 52주고점 -23.1%" in text
+    assert "Lazy 근거: 수급 PB · 🍯 꿀통 눌림목 / 21 EMA 지지 (매수 적기)" in text
+    assert "Lazy 시장: 📈 강세 정렬" in text
+    assert "Lazy 리스크: SL 3,495 (-12.1%)" in text
 
 
 def test_format_scan_report_includes_exclusion_reason_cards():
