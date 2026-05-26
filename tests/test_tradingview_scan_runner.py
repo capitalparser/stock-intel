@@ -190,6 +190,74 @@ def test_format_scan_report_includes_exclusion_reason_cards():
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 
 
+def test_format_scan_report_shows_only_current_exclusion_per_inactive_symbol():
+    active = TradingViewLabelOutcome(
+        symbol="KRX:321370",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🔼 피라미딩 추매 1 (50%)",
+        entry_price=3975,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    active_old_exit = TradingViewExcludedSignal(
+        symbol="KRX:321370",
+        market="KR",
+        signal_date="2026-03-26",
+        label="🚀 돌파 진입",
+        exit_date="2026-03-30",
+        exit_label="✂️ 부분 익절고려",
+        entry_bar_index=100,
+        exit_bar_index=104,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    inactive_old_exit = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-04-20",
+        label="🚀 돌파 진입 @SR↩",
+        exit_date="2026-04-23",
+        exit_label="💣 돌파 청산",
+        entry_bar_index=200,
+        exit_bar_index=203,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    inactive_latest_exit = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-21",
+        label="💰 진입",
+        exit_date=None,
+        exit_label="⚠️ 8선 이탈",
+        entry_bar_index=240,
+        exit_bar_index=260,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_scan_report(
+        outcomes=[active],
+        exclusions=[active_old_exit, inactive_old_exit, inactive_latest_exit],
+        errors=[],
+        scanned=["KRX:321370", "KRX:300080"],
+    )
+
+    assert "활성 후보: 1건 · 제외: 1건" in text
+    assert "제외 후보: 1건" in text
+    assert "KRX:321370" in text
+    assert "2026-03-30" not in text
+    assert "2026-04-23" not in text
+    assert "차트 우측 최신 라벨 · ⚠️ 8선 이탈" in text
+    assert "직전 진입: 2026-05-21 · 💰 진입" in text
+
+
 def test_format_scan_report_can_hide_exclusions_for_current_entry_view():
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",

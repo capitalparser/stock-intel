@@ -196,7 +196,11 @@ def format_scan_report(
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     include_exclusions: bool = True,
 ) -> str:
-    exclusion_count = len(exclusions or [])
+    current_exclusions = current_exclusions_for_report(
+        outcomes=outcomes,
+        exclusions=exclusions or [],
+    )
+    exclusion_count = len(current_exclusions)
     scan_summary = f"스캔: {len(scanned)}종목 · 활성 후보: {len(outcomes)}건"
     if include_exclusions:
         scan_summary += f" · 제외: {exclusion_count}건"
@@ -218,10 +222,26 @@ def format_scan_report(
             table_snapshots=table_snapshots,
         )
     )
-    if include_exclusions and exclusions:
+    if include_exclusions and current_exclusions:
         lines.append("")
-        lines.extend(format_telegram_exclusion_cards(exclusions))
+        lines.extend(format_telegram_exclusion_cards(current_exclusions))
     return "\n".join(lines)
+
+
+def current_exclusions_for_report(
+    *,
+    outcomes: list[TradingViewLabelOutcome],
+    exclusions: list[TradingViewExcludedSignal],
+) -> list[TradingViewExcludedSignal]:
+    active_symbols = {item.symbol for item in outcomes}
+    latest_by_symbol: dict[str, TradingViewExcludedSignal] = {}
+    for item in exclusions:
+        if item.symbol in active_symbols:
+            continue
+        previous = latest_by_symbol.get(item.symbol)
+        if previous is None or item.exit_bar_index > previous.exit_bar_index:
+            latest_by_symbol[item.symbol] = item
+    return sorted(latest_by_symbol.values(), key=lambda row: (row.exit_bar_index, row.symbol), reverse=True)
 
 
 def priority_sort_key(item: TradingViewLabelOutcome) -> tuple[int, str]:
