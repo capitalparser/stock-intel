@@ -5,6 +5,7 @@ from signals.tradingview_direct import (
     format_tradingview_direct_report,
     is_lazy_alpha_buy_label,
     is_lazy_alpha_exit_label,
+    map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
 )
@@ -263,6 +264,34 @@ def test_map_lazy_alpha_labels_right_aligns_visible_range_label_coordinates():
     assert len(exclusions) == 1
     assert exclusions[0].label == "🚀 돌파 진입"
     assert exclusions[0].exit_label == "🔪 1차 분할청산"
+
+
+def test_map_lazy_alpha_labels_to_flow_returns_recent_key_labels():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(300)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 143, "price": None},
+        {"text": "💸 최종 청산", "x": 144, "price": None},
+        {"text": "🛠️ 셋업 형성 중", "x": 155, "price": None},
+        {"text": "🚀 돌파 진입", "x": 156, "price": None},
+        {"text": "🔪 1차 분할청산", "x": 157, "price": None},
+        {"text": "🔼 피라미딩 추매 1 (50%)", "x": 159, "price": None},
+        {"text": "PBB", "x": 159, "price": None},
+    ]
+
+    flow = map_lazy_alpha_labels_to_flow(bars=bars, labels=labels, lookback_bars=30)
+
+    assert [item.label for item in flow] == [
+        "💰 진입",
+        "💸 최종 청산",
+        "🛠️ 셋업 형성 중",
+        "🚀 돌파 진입",
+        "🔪 1차 분할청산",
+        "🔼 피라미딩 추매 1 (50%)",
+    ]
+    assert flow[-1].bar_index == 299
 
 
 def test_classify_lazy_alpha_failure_separates_common_failure_modes():

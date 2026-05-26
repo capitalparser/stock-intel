@@ -14,8 +14,10 @@ from signals.independence import decide_independence
 from signals.market import Market, ticker_for_lookup
 from signals.tradingview_direct import (
     TradingViewExcludedSignal,
+    TradingViewLabelFlowItem,
     TradingViewLabelOutcome,
     classify_priority_risks,
+    map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
 )
@@ -33,6 +35,7 @@ class TradingViewScanResult:
     exclusions: list[TradingViewExcludedSignal]
     errors: list[tuple[str, str]]
     scanned: list[str]
+    label_flows: dict[str, list[TradingViewLabelFlowItem]]
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,7 @@ def scan_tradingview_symbols(
     exclusions: list[TradingViewExcludedSignal] = []
     errors: list[tuple[str, str]] = []
     scanned: list[str] = []
+    label_flows: dict[str, list[TradingViewLabelFlowItem]] = {}
     for symbol in symbols:
         try:
             cli.run(["symbol", symbol])
@@ -114,10 +118,22 @@ def scan_tradingview_symbols(
                     entry_policy=entry_policy,
                 )
             )
+            label_flows[symbol] = map_lazy_alpha_labels_to_flow(
+                bars=bars_payload,
+                labels=study_labels,
+                lookback_bars=22,
+                limit=8,
+            )
             scanned.append(symbol)
         except Exception as exc:  # pragma: no cover - external CLI boundary
             errors.append((symbol, str(exc)))
-    return TradingViewScanResult(outcomes=outcomes, exclusions=exclusions, errors=errors, scanned=scanned)
+    return TradingViewScanResult(
+        outcomes=outcomes,
+        exclusions=exclusions,
+        errors=errors,
+        scanned=scanned,
+        label_flows=label_flows,
+    )
 
 
 def symbols_from_universe(path: Path, *, limit: int, market: str | None = None) -> list[str]:

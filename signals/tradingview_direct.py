@@ -38,6 +38,13 @@ class TradingViewExcludedSignal:
     score_penalty_hint: int
 
 
+@dataclass(frozen=True)
+class TradingViewLabelFlowItem:
+    date: str
+    label: str
+    bar_index: int
+
+
 BUY_LABEL_KEYWORDS = (
     "진입",
     "추매",
@@ -69,6 +76,19 @@ EXIT_LABEL_KEYWORDS = (
     "이탈",
     "종료",
     "SL",
+    "SELL",
+    "매도",
+)
+
+FLOW_LABEL_KEYWORDS = (
+    "셋업",
+    "진입",
+    "추매",
+    "돌파",
+    "청산",
+    "손절",
+    "익절",
+    "이탈",
     "SELL",
     "매도",
 )
@@ -226,6 +246,44 @@ def map_lazy_alpha_labels_to_exclusions(
     return excluded
 
 
+def map_lazy_alpha_labels_to_flow(
+    *,
+    bars: list[dict],
+    labels: list[dict],
+    lookback_bars: int = 22,
+    limit: int = 8,
+) -> list[TradingViewLabelFlowItem]:
+    if not bars:
+        return []
+    shift = _label_bar_shift(bars, labels)
+    min_bar_index = max(0, len(bars) - lookback_bars)
+    items: list[TradingViewLabelFlowItem] = []
+    seen: set[tuple[int, str]] = set()
+    for label in labels:
+        text = str(label.get("text") or "").strip()
+        x_value = label.get("x")
+        if not text or not isinstance(x_value, int):
+            continue
+        if not _is_flow_label(text):
+            continue
+        bar_index = x_value + shift
+        if bar_index < min_bar_index or bar_index >= len(bars):
+            continue
+        compact = _compact_flow_label(text)
+        key = (bar_index, compact)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(
+            TradingViewLabelFlowItem(
+                date=_date_from_bar(bars[bar_index]),
+                label=compact,
+                bar_index=bar_index,
+            )
+        )
+    return sorted(items, key=lambda item: (item.bar_index, item.label))[-limit:]
+
+
 def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:
     return any(exit_bar_index > last_entry_bar_index for exit_bar_index in exit_bar_indexes)
 
@@ -239,6 +297,16 @@ def _label_bar_shift(bars: list[dict], labels: list[dict]) -> int:
     if right_edge_gap > 50:
         return right_edge_gap
     return 0
+
+
+def _is_flow_label(text: str) -> bool:
+    if text in {"PBB", "PBS", "Vol", "NH", "T", "W", "●", "🔥", "❄️"}:
+        return False
+    return any(keyword in text for keyword in FLOW_LABEL_KEYWORDS)
+
+
+def _compact_flow_label(text: str) -> str:
+    return " / ".join(part.strip() for part in text.splitlines() if part.strip()) or text.strip()
 
 
 def _cluster_candidates(

@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from pathlib import Path
 
 import bot
-from signals.tradingview_direct import TradingViewExcludedSignal, TradingViewLabelOutcome
+from signals.tradingview_direct import (
+    TradingViewExcludedSignal,
+    TradingViewLabelFlowItem,
+    TradingViewLabelOutcome,
+)
 from signals.payload import TradingViewSignal
 from signals.storage import SignalStore
 from signals.universe import build_universe_snapshot, save_universe_snapshot
@@ -78,7 +82,18 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     monkeypatch.setattr(
         bot,
         "scan_tradingview_symbols",
-        lambda symbols, **kwargs: SimpleNamespace(outcomes=[outcome], exclusions=[], errors=[], scanned=symbols),
+        lambda symbols, **kwargs: SimpleNamespace(
+            outcomes=[outcome],
+            exclusions=[],
+            errors=[],
+            scanned=symbols,
+            label_flows={
+                "KRX:103590": [
+                    TradingViewLabelFlowItem("2026-05-13", "🛠️ 셋업 형성 중", 90),
+                    TradingViewLabelFlowItem("2026-05-20", "💰 진입", 95),
+                ]
+            },
+        ),
     )
 
     text = bot.render_lazy_alpha_status_for_symbol("KRX:103590")
@@ -86,6 +101,9 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     assert "판정: 매수 후보 유지" in text
     assert "기술점수: 100점" in text
     assert "확인: 이후 청산/SELL 라벨 없음" in text
+    assert "최근 1개월 라벨 흐름" in text
+    assert "2026-05-13  🛠️ 셋업 형성 중" in text
+    assert "2026-05-20  💰 진입" in text
 
 
 def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(monkeypatch):
@@ -120,7 +138,7 @@ def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(
     monkeypatch.setattr(
         bot,
         "scan_tradingview_symbols",
-        lambda symbols, **kwargs: SimpleNamespace(outcomes=[old, latest], exclusions=[], errors=[], scanned=symbols),
+        lambda symbols, **kwargs: SimpleNamespace(outcomes=[old, latest], exclusions=[], errors=[], scanned=symbols, label_flows={}),
     )
 
     text = bot.render_lazy_alpha_status_for_symbol("KRX:437730")
@@ -135,7 +153,7 @@ def test_render_lazy_alpha_status_scans_single_symbol_with_latest_cluster_policy
 
     def fake_scan(symbols, **kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=symbols)
+        return SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=symbols, label_flows={})
 
     monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
 
@@ -162,7 +180,7 @@ def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     monkeypatch.setattr(
         bot,
         "scan_tradingview_symbols",
-        lambda symbols, **kwargs: SimpleNamespace(outcomes=[], exclusions=[exclusion], errors=[], scanned=symbols),
+        lambda symbols, **kwargs: SimpleNamespace(outcomes=[], exclusions=[exclusion], errors=[], scanned=symbols, label_flows={}),
     )
 
     text = bot.render_lazy_alpha_status_for_symbol("KRX:300080")

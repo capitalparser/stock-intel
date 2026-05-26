@@ -245,6 +245,11 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         )
     if result.errors:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in result.errors[:3]))
+    flow_lines = _format_label_flow(
+        getattr(result, "label_flows", {}).get(normalize_scan_symbol(symbol), [])
+    )
+    if flow_lines:
+        lines.extend(["", "최근 1개월 라벨 흐름", *flow_lines])
     return "\n".join(lines)
 
 
@@ -254,6 +259,12 @@ def _latest_tradingview_outcome(outcomes):
         key=lambda row: (row.last_signal_date, row.signal_date, row.symbol),
         reverse=True,
     )[0]
+
+
+def _format_label_flow(flow_items) -> list[str]:
+    if not flow_items:
+        return []
+    return [f"{item.date}  {_compact_label(item.label)}" for item in flow_items]
 
 
 def _compact_label(text: str) -> str:
