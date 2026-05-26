@@ -613,6 +613,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         options["symbols"],
         batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
     )
+    result = _supplement_recommendation_scan(options, result)
     enrichments = build_signal_enrichments(
         result.outcomes,
         supply_lookup=fetch_supply,
@@ -629,6 +630,27 @@ def render_signal_recommendations(args: list[str]) -> str:
         scanned=len(result.scanned),
         errors=result.errors,
     )
+
+
+def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult) -> TradingViewScanResult:
+    market = options.get("market")
+    requested = list(options.get("symbols") or [])
+    target = int(options.get("limit") or len(requested) or 1)
+    if not market or result.outcomes or not result.errors:
+        return result
+    max_attempts = max(target + 2, target * int(os.getenv("RECOMMENDATION_SCAN_FALLBACK_MULTIPLIER", "3")))
+    universe_symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=max_attempts, market=market)
+    seen = {symbol for symbol in requested}
+    seen.update(symbol for symbol, _error in result.errors)
+    seen.update(result.scanned)
+    supplements = [symbol for symbol in universe_symbols if symbol not in seen]
+    if not supplements:
+        return result
+    supplement_result, _batch_count = _scan_tradingview_symbols_batched(
+        supplements[: max(1, max_attempts - len(seen))],
+        batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
+    )
+    return _merge_scan_results([result, supplement_result])
 
 
 def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) -> tuple[TradingViewScanResult, int]:
@@ -650,15 +672,19 @@ def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) ->
     if not results:
         return TradingViewScanResult(outcomes=[], exclusions=[], errors=[], scanned=[], label_flows={}, table_snapshots={}), 0
     return (
-        TradingViewScanResult(
-            outcomes=[item for result in results for item in result.outcomes],
-            exclusions=[item for result in results for item in result.exclusions],
-            errors=[item for result in results for item in result.errors],
-            scanned=[item for result in results for item in result.scanned],
-            label_flows={key: value for result in results for key, value in result.label_flows.items()},
-            table_snapshots={key: value for result in results for key, value in result.table_snapshots.items()},
-        ),
+        _merge_scan_results(results),
         len(results),
+    )
+
+
+def _merge_scan_results(results: list[TradingViewScanResult]) -> TradingViewScanResult:
+    return TradingViewScanResult(
+        outcomes=[item for result in results for item in result.outcomes],
+        exclusions=[item for result in results for item in result.exclusions],
+        errors=[item for result in results for item in result.errors],
+        scanned=[item for result in results for item in result.scanned],
+        label_flows={key: value for result in results for key, value in result.label_flows.items()},
+        table_snapshots={key: value for result in results for key, value in result.table_snapshots.items()},
     )
 
 
