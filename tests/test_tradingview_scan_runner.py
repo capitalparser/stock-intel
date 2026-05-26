@@ -496,7 +496,7 @@ def test_telegram_cards_rank_kr_candidates_by_composite_supply_score():
             },
         }[ticker],
         fundamental_lookup=lambda ticker: {},
-        audit_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "한영회계법인"},
     )
 
     text = "\n".join(
@@ -627,6 +627,90 @@ def test_kr_enrichment_escalates_blocked_auditor_before_scores():
     assert "감사인: 독립성 차단 · 삼정회계법인" in text
 
 
+def test_recommend_signal_candidates_blocks_kpmg_independence_risk():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:083650",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=98300,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": 500_000_000, "5d": 2_000_000_000, "20d": 8_000_000_000},
+            "foreigner": {"today": 300_000_000, "5d": 1_500_000_000, "20d": 5_000_000_000},
+            "daily": [{"institution": 1, "foreigner": 1}] * 5,
+        },
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "삼정KPMG"},
+    )
+
+    recommendations = recommend_signal_candidates([outcome], enrichments=enrichments)
+
+    assert recommendations[0].state == "독립성 차단"
+    assert recommendations[0].recommendation_score <= 40
+    assert "독립성 차단" in recommendations[0].risks
+    assert "매입 검토 금지" in recommendations[0].next_action
+
+    text = format_recommendation_report(
+        recommendations,
+        scanned=1,
+        errors=[],
+        ticker_cache=[{"code": "083650", "name": "비에이치아이", "market": "KOSDAQ"}],
+    )
+
+    assert "상태: 독립성 차단" in text
+    assert "리스크: 독립성 차단" in text
+    assert "다음 행동: 매입 검토 금지, 독립성 원천 확인 전 후보 제외" in text
+
+
+def test_recommend_signal_candidates_holds_when_auditor_rollover_is_unverified():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:095340",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=197300,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": 100_000_000, "5d": 900_000_000, "20d": 2_500_000_000},
+            "foreigner": {"today": 50_000_000, "5d": 700_000_000, "20d": 1_500_000_000},
+            "daily": [{"institution": 1, "foreigner": 1}] * 5,
+        },
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {
+            "recent": [
+                {"year": 2025, "firm": "안진회계법인"},
+                {"year": 2024, "firm": "안진회계법인"},
+            ],
+            "current_firm": "안진회계법인",
+        },
+    )
+
+    recommendations = recommend_signal_candidates([outcome], enrichments=enrichments)
+
+    assert recommendations[0].state == "원천확인 대기"
+    assert "감사인 원천 확인 필요" in recommendations[0].risks
+    assert recommendations[0].next_action == "독립성 원천 확인 전 매입 보류"
+
+
 def test_kr_enrichment_scores_supply_accumulation_for_scan_cards():
     outcome = TradingViewLabelOutcome(
         symbol="KRX:103590",
@@ -657,7 +741,7 @@ def test_kr_enrichment_scores_supply_accumulation_for_scan_cards():
             ],
         },
         fundamental_lookup=lambda ticker: {},
-        audit_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "한영회계법인"},
     )
 
     text = "\n".join(format_telegram_outcome_cards([outcome], enrichments=enrichments))
@@ -743,7 +827,7 @@ def test_recommend_signal_candidates_prioritizes_fresh_unreflected_entries():
             },
         }[ticker],
         fundamental_lookup=lambda ticker: {},
-        audit_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "한영회계법인"},
     )
 
     recommendations = recommend_signal_candidates(

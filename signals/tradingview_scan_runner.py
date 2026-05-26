@@ -52,6 +52,7 @@ class KrSignalEnrichment:
     fundamental: str
     auditor: str
     independence_alert: str
+    independence_status: str
 
 
 @dataclass(frozen=True)
@@ -468,9 +469,10 @@ def recommend_signal_candidates(
             base_score += 12
         if interpretation and interpretation.score_adjustment > 0:
             base_score += min(5, interpretation.score_adjustment)
-        recommendation_score = max(0, min(100, round(base_score - reflection_penalty)))
+        independence_risks, independence_penalty = _independence_recommendation_risks(enrichment)
+        recommendation_score = max(0, min(100, round(base_score - reflection_penalty - independence_penalty)))
         flow_risks = _flow_recommendation_risks(interpretation)
-        risks = [*reflection_risks, *outcome.risk_flags, *table_risks, *flow_risks]
+        risks = [*independence_risks, *reflection_risks, *outcome.risk_flags, *table_risks, *flow_risks]
         evidence = _recommendation_evidence(
             outcome=outcome,
             enrichment=enrichment,
@@ -724,6 +726,7 @@ def build_signal_enrichments(
                 fundamental=_non_kr_profile_source(item.market),
                 auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
                 independence_alert=format_independence_alert(decision),
+                independence_status=decision.status,
             )
             continue
         ticker = ticker_for_lookup(item.symbol, "KR")
@@ -735,6 +738,7 @@ def build_signal_enrichments(
                 fundamental="데이터 없음",
                 auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
                 independence_alert=format_independence_alert(decision),
+                independence_status=decision.status,
             )
             continue
         supply = _safe_lookup(supply_lookup, ticker)
@@ -747,6 +751,7 @@ def build_signal_enrichments(
             fundamental=_format_fundamental_summary(fundamental),
             auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
             independence_alert=format_independence_alert(decision),
+            independence_status=decision.status,
         )
     return enrichments
 
@@ -903,6 +908,10 @@ def _reflection_penalty(outcome: TradingViewLabelOutcome) -> tuple[int, list[str
 
 
 def _recommendation_state(score: int, reflection_penalty: int, risks: list[str]) -> str:
+    if any("독립성 차단" in risk for risk in risks):
+        return "독립성 차단"
+    if any("독립성 원천 확인" in risk or "감사인 원천 확인" in risk for risk in risks):
+        return "원천확인 대기"
     if score >= 82 and reflection_penalty <= 10:
         return "우선 검토"
     if score >= 70 and reflection_penalty <= 20:
@@ -913,6 +922,10 @@ def _recommendation_state(score: int, reflection_penalty: int, risks: list[str])
 
 
 def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[str]) -> str:
+    if any("독립성 차단" in risk for risk in risks):
+        return "매입 검토 금지, 독립성 원천 확인 전 후보 제외"
+    if any("독립성 원천 확인" in risk or "감사인 원천 확인" in risk for risk in risks):
+        return "독립성 원천 확인 전 매입 보류"
     if any("휩쏘" in risk for risk in risks):
         return "신규 진입 보류, 재돌파 유지와 무효화 라벨 재발 여부 확인"
     if any("Lazy 테이블" in risk or "매수 자격 미충족" in risk for risk in risks):
@@ -922,6 +935,21 @@ def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[st
     if "피라미딩" in outcome.label:
         return "기존 보유 관점이면 추매 조건과 손절폭 재확인"
     return "분할 진입 가능성 검토 및 독립성/손절선 확인"
+
+
+def _independence_recommendation_risks(enrichment: KrSignalEnrichment | None) -> tuple[list[str], int]:
+    if enrichment is None:
+        return [], 0
+    status = enrichment.independence_status
+    if status == "BLOCKED_CONFIRMED":
+        return ["독립성 차단"], 80
+    if status == "BLOCKED_POSSIBLE":
+        return ["독립성 차단 가능", "독립성 원천 확인 필요"], 65
+    if status in {"MANUAL_VERIFY", "MANUAL_VERIFY_CURRENT_YEAR", "DATA_MISSING", "UNKNOWN_MARKET"}:
+        return ["독립성 원천 확인 필요"], 25
+    if status == "ROLLOVER_INFERRED":
+        return ["감사인 원천 확인 필요"], 12
+    return [], 0
 
 
 def _flow_recommendation_risks(interpretation) -> list[str]:
