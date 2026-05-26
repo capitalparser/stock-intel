@@ -59,6 +59,7 @@ from signals.market import Market
 from signals.tradingview_direct import TradingViewTableSnapshot, evaluate_lazy_alpha_state, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
+    TradingViewScanResult,
     adjusted_priority_penalty,
     build_kr_signal_enrichments,
     format_scan_report,
@@ -520,14 +521,9 @@ def render_signal_detail(ticker: str, *, now: int | None = None) -> str:
 
 def render_tradingview_scan(args: list[str]) -> str:
     options = parse_tradingview_scan_args(args)
-    result = scan_tradingview_symbols(
+    result, batch_count = _scan_tradingview_symbols_batched(
         options["symbols"],
-        mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
-        bars=500,
-        max_labels=250,
-        timeframe="D",
-        entry_policy="last",
-        sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
+        batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
     )
     outcomes = result.outcomes
     if options["sort"] == "SCORE":
@@ -547,6 +543,39 @@ def render_tradingview_scan(args: list[str]) -> str:
         table_snapshots=result.table_snapshots,
         title=options["title"],
         include_exclusions=options["include_exclusions"],
+        requested_count=len(options["symbols"]),
+        batch_count=batch_count,
+    )
+
+
+def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) -> tuple[TradingViewScanResult, int]:
+    safe_batch_size = max(1, batch_size)
+    chunks = [symbols[index : index + safe_batch_size] for index in range(0, len(symbols), safe_batch_size)] or [[]]
+    results = [
+        scan_tradingview_symbols(
+            chunk,
+            mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
+            bars=500,
+            max_labels=250,
+            timeframe="D",
+            entry_policy="last",
+            sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
+        )
+        for chunk in chunks
+        if chunk
+    ]
+    if not results:
+        return TradingViewScanResult(outcomes=[], exclusions=[], errors=[], scanned=[], label_flows={}, table_snapshots={}), 0
+    return (
+        TradingViewScanResult(
+            outcomes=[item for result in results for item in result.outcomes],
+            exclusions=[item for result in results for item in result.exclusions],
+            errors=[item for result in results for item in result.errors],
+            scanned=[item for result in results for item in result.scanned],
+            label_flows={key: value for result in results for key, value in result.label_flows.items()},
+            table_snapshots={key: value for result in results for key, value in result.table_snapshots.items()},
+        ),
+        len(results),
     )
 
 
@@ -641,6 +670,7 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
     limit = 5
     sort = "TIME"
     sync = False
+    full_universe = False
     include_exclusions = True
     title = "📡 TradingView 직접 스캔"
     symbols: list[str] = []
@@ -648,6 +678,11 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         value = arg.strip()
         lowered = value.lower()
         if not value or lowered in {"관심", "universe", "watchlist", "watchlists"}:
+            continue
+        if lowered in {"전체", "모두", "all", "full"}:
+            full_universe = True
+            limit = int(os.getenv("TRADINGVIEW_SCAN_FULL_LIMIT", "120"))
+            title = "📡 TradingView 전체 Watchlist 스캔"
             continue
         if lowered in {"sync", "동기화", "현재"}:
             sync = True
@@ -688,6 +723,7 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         "limit": limit,
         "sort": sort,
         "sync": sync,
+        "full_universe": full_universe,
         "include_exclusions": include_exclusions,
         "title": title,
     }

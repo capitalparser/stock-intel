@@ -225,6 +225,49 @@ def test_render_tradingview_scan_uses_latest_cluster_policy(monkeypatch):
     assert captured["entry_policy"] == "last"
 
 
+def test_render_tradingview_scan_batches_full_universe(monkeypatch, tmp_path):
+    universe_path = tmp_path / "universe.json"
+    universe_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(universe_path))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_BATCH_SIZE", "2")
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: [
+            "KRX:000001",
+            "KRX:000002",
+            "KRX:000003",
+            "KRX:000004",
+            "KRX:000005",
+        ][:limit],
+    )
+    calls = []
+
+    def fake_scan(symbols, **kwargs):
+        calls.append(list(symbols))
+        return SimpleNamespace(
+            outcomes=[],
+            exclusions=[],
+            errors=[],
+            scanned=list(symbols),
+            label_flows={},
+            table_snapshots={},
+        )
+
+    monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
+    monkeypatch.setattr(bot, "build_kr_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    text = bot.render_tradingview_scan(["전체", "kr", "5"])
+
+    assert calls == [
+        ["KRX:000001", "KRX:000002"],
+        ["KRX:000003", "KRX:000004"],
+        ["KRX:000005"],
+    ]
+    assert "TradingView 전체 Watchlist 스캔" in text
+    assert "요청: 5종목 · 배치: 3회" in text
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",
@@ -311,6 +354,7 @@ def test_parse_tradingview_scan_text_supports_korean_scan_command():
     assert bot.parse_tradingview_scan_text("/국장스캔") == ["국장", "점수", "50", "동기화"]
     assert bot.parse_tradingview_scan_text("/진입 kr") == ["활성만", "점수", "50", "동기화", "kr"]
     assert bot.parse_tradingview_scan_text("매수 us 20") == ["활성만", "점수", "50", "동기화", "us", "20"]
+    assert bot.parse_tradingview_scan_text("/스캔 전체 kr 80") == ["전체", "kr", "80"]
     assert bot.parse_tradingview_scan_text("krscan 20") == ["국장", "점수", "50", "동기화", "20"]
     assert bot.parse_tradingview_scan_text("/tvscan KRX:005930") == ["KRX:005930"]
     assert bot.parse_tradingview_scan_text("삼성전자") is None

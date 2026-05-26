@@ -198,6 +198,8 @@ def format_scan_report(
     exclusions: list[TradingViewExcludedSignal] | None = None,
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     include_exclusions: bool = True,
+    requested_count: int | None = None,
+    batch_count: int | None = None,
 ) -> str:
     current_exclusions = current_exclusions_for_report(
         outcomes=outcomes,
@@ -215,6 +217,8 @@ def format_scan_report(
     ]
     if scanned:
         lines.append("대상: " + ", ".join(scanned[:12]))
+    if requested_count is not None and batch_count is not None:
+        lines.append(f"요청: {requested_count}종목 · 배치: {batch_count}회")
     if errors:
         lines.append("오류: " + " · ".join(f"{symbol}" for symbol, _error in errors[:5]))
     lines.append("")
