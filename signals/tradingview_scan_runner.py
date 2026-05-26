@@ -460,6 +460,7 @@ def format_recommendation_report(
     scanned: int,
     errors: list[tuple[str, str]],
     ticker_cache: list[dict] | None = None,
+    table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     limit: int = 12,
 ) -> str:
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
@@ -480,6 +481,7 @@ def format_recommendation_report(
     for index, item in enumerate(candidates[:limit], start=1):
         risks = "없음" if not item.risks else " · ".join(item.risks[:4])
         supply = "-" if item.supply_score is None else f"{item.supply_score}/35"
+        table = (table_snapshots or {}).get(item.symbol)
         lines.extend(
             [
                 f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
@@ -500,8 +502,11 @@ def format_recommendation_report(
                     f"독립성알림: {item.enrichment.independence_alert}",
                     f"감사인: {item.enrichment.auditor}",
                     f"수급: {item.enrichment.supply}",
+                    f"프로필: {item.enrichment.fundamental}",
                 ]
             )
+        if table:
+            lines.extend(format_lazy_alpha_table_card_lines(table))
         lines.append("")
     if errors:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in errors[:5]))
@@ -631,10 +636,12 @@ def build_signal_enrichments(
     for item in outcomes:
         if item.market != "KR":
             decision = decide_independence(_market_object(item.market), {})
+            market_label = _market_object(item.market).label
+            exchange = _exchange_for_symbol(item.symbol)
             enrichments[item.symbol] = KrSignalEnrichment(
-                supply="자동 수급 미지원",
+                supply=f"시장: {market_label} · 거래소 {exchange} · 수급 자동 미지원",
                 supply_score=None,
-                fundamental="자동 펀더멘털 미지원",
+                fundamental=_non_kr_profile_source(item.market),
                 auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
                 independence_alert=format_independence_alert(decision),
             )
@@ -667,6 +674,20 @@ def build_signal_enrichments(
 def _market_object(market_code: str) -> Market:
     labels = {"US": "미국", "JP": "일본", "KR": "한국"}
     return Market(market_code, labels.get(market_code, market_code))
+
+
+def _exchange_for_symbol(symbol: str) -> str:
+    if ":" not in symbol:
+        return "-"
+    return symbol.split(":", 1)[0]
+
+
+def _non_kr_profile_source(market_code: str) -> str:
+    if market_code == "US":
+        return "원천: EDGAR/10-K · 감사인/사업/리스크 수동 확인 필요"
+    if market_code == "JP":
+        return "원천: EDINET/유가증권보고서 · 감사인/사업/리스크 수동 확인 필요"
+    return "원천 확인 필요"
 
 
 def _safe_lookup(lookup: Callable[[str], dict], ticker: str) -> dict:

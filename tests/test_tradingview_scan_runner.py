@@ -863,8 +863,71 @@ def test_us_recommendation_report_includes_manual_independence_context():
         recommend_signal_candidates([outcome], enrichments=enrichments),
         scanned=1,
         errors=[],
+        table_snapshots={
+            "NASDAQ:AAPL": TradingViewTableSnapshot(
+                signal="🟢 매수 진입",
+                conviction="🟢 A",
+                smart_eval="📈 안정적 우상향",
+                ema_alignment="🟢 정배열",
+                aux_score=65,
+                aux_signal="Sigma:PB",
+                market_sector="Technology · Consumer Electronics",
+                trend_energy="🔥 상승 가속",
+                market_control="🐂 매수세",
+                rs_score=92,
+                volume_strength=1.8,
+                high_52w_pct=-8.1,
+                stop_loss=172,
+                stop_loss_pct=-9.4,
+                target_price=228,
+                target_return_pct=20,
+                risk_reward="2.1",
+                buy_eligibility="🟢 적합",
+                fundamental="☀️ 펀더멘털: 우수",
+                eps_growth=[],
+                sales_growth=[],
+                raw_rows=[],
+            )
+        },
     )
 
     assert "NASDAQ:AAPL" in text
     assert "독립성알림: 🟡 독립성 확인 필요 — 원천 확인 전 매입 보류" in text
     assert "감사인: 수동 확인 필요 · 미국 종목 감사인 자동 확인 미지원. EDGAR/10-K 등 원천 확인 필요." in text
+    assert "수급: 시장: 미국 · 거래소 NASDAQ · 수급 자동 미지원" in text
+    assert "프로필: 원천: EDGAR/10-K · 감사인/사업/리스크 수동 확인 필요" in text
+    assert "Lazy 시장: Technology · Consumer Electronics · 🔥 상승 가속 · 🐂 매수세" in text
+
+
+def test_jp_recommendation_report_includes_edinet_manual_context():
+    outcome = TradingViewLabelOutcome(
+        symbol="TSE:7203",
+        market="JP",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=3000,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {},
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    text = format_recommendation_report(
+        recommend_signal_candidates([outcome], enrichments=enrichments),
+        scanned=1,
+        errors=[],
+    )
+
+    assert "TSE:7203" in text
+    assert "수급: 시장: 일본 · 거래소 TSE · 수급 자동 미지원" in text
+    assert "프로필: 원천: EDINET/유가증권보고서 · 감사인/사업/리스크 수동 확인 필요" in text
+    assert "감사인: 수동 확인 필요 · 일본 종목 감사인 자동 확인 미지원. EDINET/유가증권보고서 등 원천 확인 필요." in text
