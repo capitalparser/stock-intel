@@ -648,8 +648,10 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
     if not market or len(result.outcomes) >= target or options.get("explicit_symbols"):
         return result
     max_attempts = _recommendation_max_attempts(target)
-    universe_symbols = _filter_recommendation_error_cooldown(
-        symbols_from_universe(Path(_universe_snapshot_path()), limit=max_attempts, market=market)
+    universe_symbols = _recommendation_symbol_pool(
+        market=market,
+        limit=max_attempts,
+        ignore_error_cooldown=bool(options.get("sync")),
     )
     seen = {symbol for symbol in requested}
     seen.update(symbol for symbol, _error in result.errors)
@@ -680,12 +682,23 @@ def _recommendation_initial_symbols(options: dict) -> list[str]:
     symbols = list(options.get("symbols") or [])
     market = options.get("market")
     if not market:
+        if options.get("sync"):
+            return symbols
         return _filter_recommendation_error_cooldown(symbols) or symbols
     target = int(options.get("limit") or len(symbols) or 1)
-    pool = _filter_recommendation_error_cooldown(
-        symbols_from_universe(Path(_universe_snapshot_path()), limit=_recommendation_max_attempts(target), market=market)
+    pool = _recommendation_symbol_pool(
+        market=market,
+        limit=_recommendation_max_attempts(target),
+        ignore_error_cooldown=bool(options.get("sync")),
     )
     return pool[:target] if pool else symbols
+
+
+def _recommendation_symbol_pool(*, market: str, limit: int, ignore_error_cooldown: bool) -> list[str]:
+    symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=limit, market=market)
+    if ignore_error_cooldown:
+        return symbols
+    return _filter_recommendation_error_cooldown(symbols)
 
 
 def _recommendation_max_attempts(target: int) -> int:

@@ -717,6 +717,50 @@ def test_render_signal_recommendations_cools_down_repeated_error_symbols(monkeyp
     assert "NASDAQ:AAPL" in second
 
 
+def test_render_signal_recommendations_sync_bypasses_error_cooldown(monkeypatch, tmp_path):
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(tmp_path / "cooldown.json"))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", "3600")
+    monkeypatch.setattr(
+        bot,
+        "parse_tradingview_scan_args",
+        lambda args: {
+            "symbols": ["AMEX:BMNR"],
+            "market": "US",
+            "limit": 1,
+            "explicit_symbols": False,
+            "sync": "동기화" in args,
+        },
+    )
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: ["AMEX:BMNR", "NASDAQ:AAPL"][:limit],
+    )
+    calls = []
+
+    def fake_scan(symbols, batch_size, **kwargs):
+        calls.append(list(symbols))
+        if symbols == ["AMEX:BMNR"]:
+            return (
+                SimpleNamespace(outcomes=[], exclusions=[], errors=[("AMEX:BMNR", "bad symbol")], scanned=[], label_flows={}, table_snapshots={}),
+                1,
+            )
+        return (
+            SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=list(symbols), label_flows={}, table_snapshots={}),
+            1,
+        )
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    bot.render_signal_recommendations(["us", "1"])
+    bot.render_signal_recommendations(["us", "1"])
+    bot.render_signal_recommendations(["us", "1", "동기화"])
+
+    assert calls == [["AMEX:BMNR"], ["NASDAQ:AAPL"], ["NASDAQ:AAPL"], ["AMEX:BMNR"], ["NASDAQ:AAPL"]]
+
+
 def test_render_signal_recommendations_supplements_when_initial_scan_has_no_candidate(monkeypatch, tmp_path):
     outcome = TradingViewLabelOutcome(
         symbol="NASDAQ:AAPL",
