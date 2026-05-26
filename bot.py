@@ -611,6 +611,7 @@ def render_lazy_alpha_transition_report(args: list[str]) -> str:
 def render_signal_recommendations(args: list[str]) -> str:
     scan_args = ["활성만", "점수", "50", *args]
     options = parse_tradingview_scan_args(scan_args)
+    cooldown_skips = _recommendation_cooldown_skips(options)
     if not options.get("explicit_symbols"):
         options = {**options, "symbols": _recommendation_initial_symbols(options)}
     result, _batch_count = _scan_tradingview_symbols_batched(
@@ -637,6 +638,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         scanned=len(result.scanned),
         errors=result.errors,
         exclusions=result.exclusions,
+        cooldown_skips=cooldown_skips,
         table_snapshots=result.table_snapshots,
     )
 
@@ -699,6 +701,25 @@ def _recommendation_symbol_pool(*, market: str, limit: int, ignore_error_cooldow
     if ignore_error_cooldown:
         return symbols
     return _filter_recommendation_error_cooldown(symbols)
+
+
+def _recommendation_cooldown_skips(options: dict) -> list[str]:
+    if options.get("sync") or options.get("explicit_symbols"):
+        return []
+    active = _active_recommendation_error_symbols()
+    if not active:
+        return []
+    market = options.get("market")
+    if market:
+        target = int(options.get("limit") or len(options.get("symbols") or []) or 1)
+        symbols = symbols_from_universe(
+            Path(_universe_snapshot_path()),
+            limit=_recommendation_max_attempts(target),
+            market=market,
+        )
+    else:
+        symbols = list(options.get("symbols") or [])
+    return [symbol for symbol in symbols if symbol in active]
 
 
 def _recommendation_max_attempts(target: int) -> int:

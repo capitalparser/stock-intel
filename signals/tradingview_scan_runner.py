@@ -460,6 +460,7 @@ def format_recommendation_report(
     scanned: int,
     errors: list[tuple[str, str]],
     exclusions: list[TradingViewExcludedSignal] | None = None,
+    cooldown_skips: list[str] | None = None,
     ticker_cache: list[dict] | None = None,
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     limit: int = 12,
@@ -472,12 +473,19 @@ def format_recommendation_report(
         "정렬: 추천점수 높은 순",
         "",
     ]
+    if cooldown_skips:
+        lines.append("쿨다운 제외: " + " · ".join(cooldown_skips[:8]))
+        lines.append("")
     if not candidates:
         lines.extend(
             [
                 "표시할 추천 후보가 없습니다.",
                 "조건: 활성 매수 라벨 + 낮은 시세반영 페널티 + 수급/흐름 보강",
-                *_empty_recommendation_diagnostics(scanned=scanned, errors=errors, exclusions=exclusions or []),
+                *_empty_recommendation_diagnostics(
+                    scanned=scanned,
+                    errors=errors,
+                    exclusions=exclusions or [],
+                ),
             ]
         )
     for index, item in enumerate(candidates[:limit], start=1):

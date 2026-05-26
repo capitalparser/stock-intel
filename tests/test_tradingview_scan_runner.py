@@ -813,11 +813,13 @@ def test_empty_recommendation_report_explains_errors_and_exclusions():
         scanned=2,
         errors=[("AMEX:BMNR", "symbol not found")],
         exclusions=[exclusion],
+        cooldown_skips=["NASDAQ:MSFT"],
     )
 
     assert "표시할 추천 후보가 없습니다." in text
     assert "진단: 오류 1건 · 제외 1건 · 활성 매수 후보 0건" in text
     assert "오류 심볼: AMEX:BMNR" in text
+    assert "쿨다운 제외: NASDAQ:MSFT" in text
     assert "제외 사유: 💸 최종 청산 1건" in text
     assert "다음 확인: /추천 us 10 동기화" in text
     assert "\n오류: AMEX:BMNR" not in text

@@ -714,6 +714,7 @@ def test_render_signal_recommendations_cools_down_repeated_error_symbols(monkeyp
 
     assert calls == [["AMEX:BMNR"], ["NASDAQ:AAPL"], ["NASDAQ:AAPL"]]
     assert "오류: AMEX:BMNR" in first
+    assert "쿨다운 제외: AMEX:BMNR" in second
     assert "NASDAQ:AAPL" in second
 
 
