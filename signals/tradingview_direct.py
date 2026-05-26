@@ -167,7 +167,12 @@ def map_lazy_alpha_labels_to_outcomes(
         x_value = label.get("x")
         if not isinstance(x_value, int):
             continue
-        bar_index = x_value + shift
+        bar_index = _label_bar_index(
+            x_value,
+            bars=bars,
+            shift=shift,
+            clamp_right=is_lazy_alpha_exit_label(text),
+        )
         if bar_index < 0:
             continue
         if is_lazy_alpha_exit_label(text):
@@ -237,7 +242,12 @@ def map_lazy_alpha_labels_to_exclusions(
         x_value = label.get("x")
         if not isinstance(x_value, int):
             continue
-        bar_index = x_value + shift
+        bar_index = _label_bar_index(
+            x_value,
+            bars=bars,
+            shift=shift,
+            clamp_right=is_lazy_alpha_exit_label(text),
+        )
         if bar_index < 0:
             continue
         if is_lazy_alpha_exit_label(text):
@@ -255,7 +265,7 @@ def map_lazy_alpha_labels_to_exclusions(
         later_exits = [(bar_index, label) for bar_index, label in exits if bar_index > last_bar_index]
         if not later_exits:
             continue
-        exit_bar_index, exit_label = min(later_exits, key=lambda item: item[0])
+        exit_bar_index, exit_label = max(later_exits, key=lambda item: (item[0], _exit_label_priority(str(item[1].get("text") or ""))))
         text = str(selected_label.get("text") or "")
         entry = _float_or_none(bars[selected_bar_index].get("close"))
         context = _context_metrics(bars, selected_bar_index, entry or 0)
@@ -301,7 +311,12 @@ def map_lazy_alpha_labels_to_flow(
             continue
         if not _is_flow_label(text):
             continue
-        bar_index = x_value + shift
+        bar_index = _label_bar_index(
+            x_value,
+            bars=bars,
+            shift=shift,
+            clamp_right=is_lazy_alpha_exit_label(text),
+        )
         if bar_index < min_bar_index or bar_index >= len(bars):
             continue
         compact = _compact_flow_label(text)
@@ -450,6 +465,13 @@ def _label_bar_shift(bars: list[dict], labels: list[dict]) -> int:
     return 0
 
 
+def _label_bar_index(x_value: int, *, bars: list[dict], shift: int, clamp_right: bool = False) -> int:
+    bar_index = x_value + shift
+    if clamp_right and shift == 0 and bar_index >= len(bars):
+        return len(bars) - 1
+    return bar_index
+
+
 def _is_flow_label(text: str) -> bool:
     if text in {"PBB", "PBS", "Vol", "NH", "T", "W", "●", "🔥", "❄️"}:
         return False
@@ -474,6 +496,20 @@ def _flow_event_type(label: str) -> str:
     if is_lazy_alpha_exit_label(label):
         return "EXIT"
     return "OTHER"
+
+
+def _exit_label_priority(label: str) -> int:
+    if "SELL" in label or "매도" in label:
+        return 50
+    if "최종 청산" in label or "돌파 청산" in label or "손절" in label:
+        return 40
+    if "분할청산" in label or "익절" in label:
+        return 30
+    if "이탈" in label:
+        return 20
+    if "관망" in label or "종료" in label:
+        return 10
+    return 0
 
 
 def _has_entry_after_exit(events: list[str]) -> bool:

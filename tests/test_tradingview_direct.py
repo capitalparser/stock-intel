@@ -178,6 +178,29 @@ def test_map_lazy_alpha_labels_reports_exclusion_after_later_momentum_sell_label
     assert exclusions[0].risk_flags == []
 
 
+def test_map_lazy_alpha_labels_reports_latest_exit_after_entry_for_current_state():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(300)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 297, "price": None},
+        {"text": "⚠️ 8선 이탈", "x": 300, "price": None},
+        {"text": "📉 모멘텀 SELL\nENTRY: 9000\nTP: 6470\nSL: 10260\nRR: 1:2 | 5봉", "x": 409, "price": None},
+    ]
+
+    exclusions = map_lazy_alpha_labels_to_exclusions(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        duplicate_window_bars=5,
+    )
+
+    assert len(exclusions) == 1
+    assert exclusions[0].exit_label.startswith("📉 모멘텀 SELL")
+
+
 def test_map_lazy_alpha_labels_resets_entry_after_exit_label_beyond_loaded_bars():
     bars = [
         {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
@@ -266,6 +289,44 @@ def test_map_lazy_alpha_labels_right_aligns_visible_range_label_coordinates():
     assert len(exclusions) == 1
     assert exclusions[0].label == "🚀 돌파 진입"
     assert exclusions[0].exit_label == "🔪 1차 분할청산"
+
+
+def test_map_lazy_alpha_labels_left_shifts_visible_range_coordinates_beyond_loaded_bars():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(300)
+    ]
+    labels = [
+        {"text": "💰 진입", "x": 297, "price": None},
+        {"text": "📉 모멘텀 SELL\nENTRY: 9000\nTP: 6470\nSL: 10260\nRR: 1:2 | 5봉", "x": 409, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=300,
+        duplicate_window_bars=5,
+        entry_policy="last",
+        horizons=(5,),
+        active_only=True,
+    )
+    exclusions = map_lazy_alpha_labels_to_exclusions(
+        symbol="KRX:300080",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=300,
+        duplicate_window_bars=5,
+        entry_policy="last",
+    )
+
+    assert outcomes == []
+    assert len(exclusions) == 1
+    assert exclusions[0].entry_bar_index == 297
+    assert exclusions[0].exit_bar_index == 299
+    assert exclusions[0].exit_label.startswith("📉 모멘텀 SELL")
 
 
 def test_map_lazy_alpha_labels_to_flow_returns_recent_key_labels():

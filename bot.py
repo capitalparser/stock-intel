@@ -226,7 +226,11 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
             ]
         )
     elif result.exclusions:
-        item = sorted(result.exclusions, key=lambda row: row.exit_bar_index, reverse=True)[0]
+        item = sorted(
+            result.exclusions,
+            key=lambda row: (row.exit_bar_index, row.entry_bar_index),
+            reverse=True,
+        )[0]
         exit_date = item.exit_date or "차트 우측 최신 라벨"
         score = max(0, 100 - item.score_penalty_hint)
         lines.extend(

@@ -239,7 +239,7 @@ def current_exclusions_for_report(
         if item.symbol in active_symbols:
             continue
         previous = latest_by_symbol.get(item.symbol)
-        if previous is None or item.exit_bar_index > previous.exit_bar_index:
+        if previous is None or (item.exit_bar_index, item.entry_bar_index) > (previous.exit_bar_index, previous.entry_bar_index):
             latest_by_symbol[item.symbol] = item
     return sorted(latest_by_symbol.values(), key=lambda row: (row.exit_bar_index, row.symbol), reverse=True)
 
