@@ -173,6 +173,64 @@ def test_parse_tradingview_scan_text_supports_korean_scan_command():
     assert bot.parse_tradingview_scan_text("삼성전자") is None
 
 
+def test_parse_leading_discovery_text_supports_korean_command():
+    assert bot.parse_leading_discovery_text("/선행 kr 20") == ["kr", "20"]
+    assert bot.parse_leading_discovery_text("발굴 국장") == ["국장"]
+    assert bot.parse_leading_discovery_text("삼성전자") is None
+
+
+def test_render_leading_discovery_combines_supply_and_technical_scores(monkeypatch):
+    monkeypatch.setattr(bot, "_leading_kr_symbol_pool", lambda limit, use_universe: ["KRX:103590"])
+    monkeypatch.setattr(bot, "_ticker_name_map", lambda: {"103590": "일진전기"})
+    monkeypatch.setattr(
+        bot,
+        "fetch_supply",
+        lambda ticker: {
+            "institution": {"today": 200_000_000, "5d": 1_200_000_000, "20d": 4_800_000_000},
+            "foreigner": {"today": 100_000_000, "5d": 800_000_000, "20d": 2_200_000_000},
+            "daily": [{"institution": 1, "foreigner": 1}] * 5,
+        },
+    )
+    monkeypatch.setattr(
+        bot,
+        "fetch_technical",
+        lambda ticker: {
+            "price": 84_000,
+            "ma20": 82_000,
+            "ma50": 79_000,
+            "ma150": 70_000,
+            "ma200": 66_000,
+            "ma_trend": "정배열",
+            "trend_template": "통과",
+            "volume_ratio": 1.25,
+            "rsi14": 58,
+            "bb_pct": 66,
+            "from_52w_high_pct": -12,
+            "from_52w_low_pct": 42,
+            "signal": "중립",
+        },
+    )
+    monkeypatch.setattr(
+        bot,
+        "fetch_fundamental",
+        lambda ticker: {
+            "financials": [
+                {"year": 2024, "revenue": 100, "operating_income": 8, "operating_cash_flow": 4},
+                {"year": 2025, "revenue": 125, "operating_income": 14, "operating_cash_flow": 7},
+            ]
+        },
+    )
+    monkeypatch.setattr(bot, "fetch_audit_firm", lambda ticker: {})
+    monkeypatch.setattr(bot, "_leading_auditor_summary", lambda audit: "차단 없음")
+
+    text = bot.render_leading_discovery(["kr", "10"])
+
+    assert "🔎 국장 선행 후보" in text
+    assert "KRX:103590 · 일진전기" in text
+    assert "기관 20일 순매수" in text
+    assert "수급" in text
+
+
 def test_strip_korean_slash_command_handles_args_and_bot_suffix():
     command, args = bot._strip_korean_slash_command("/신호@stock_intel_bot kr 8h")
 

@@ -48,6 +48,14 @@ from signals.console import (
     parse_console_args,
     parse_console_callback,
 )
+from signals.independence import decide_independence
+from signals.kr_watch_candidates import KR_CANDIDATE_SEEDS
+from signals.leading_discovery import (
+    LeadingCandidate,
+    format_leading_report,
+    score_leading_candidate,
+)
+from signals.market import Market
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
     adjusted_priority_penalty,
@@ -65,7 +73,7 @@ from signals.universe import (
     sync_universe_from_tradingview,
 )
 from utils.formatter import format_message
-from utils.ticker import refresh_ticker_cache, search_ticker
+from utils.ticker import load_ticker_cache, refresh_ticker_cache, search_ticker
 
 # ---------------------------------------------------------------------------
 # 로거
@@ -99,6 +107,7 @@ HELP_TEXT = (
     "DM: 삼성전자 / SK하이닉스 / NAVER\n"
     "그룹: /종목 삼성전자 또는 /s 삼성전자\n\n"
     "/신호 — Lazy Alpha 버튼 콘솔\n"
+    "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
     "/국장스캔 — TradingView 국장 watchlist 기술점수 스캔\n"
@@ -114,6 +123,7 @@ HELP_TEXT = (
 _HELP_TEXT_SHORTCUTS = {"기능", "도움말", "메뉴", "help"}
 _SIGNAL_CONSOLE_TEXT_SHORTCUTS = {"시그널", "신호", "signals", "signal"}
 _TRADINGVIEW_SCAN_TEXT_SHORTCUTS = {"스캔", "현재신호", "국장스캔", "tvscan", "scan", "krscan"}
+_LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", "discovery"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -400,6 +410,92 @@ def render_tradingview_scan(args: list[str]) -> str:
     )
 
 
+def render_leading_discovery(args: list[str]) -> str:
+    options = parse_leading_discovery_args(args)
+    candidates: list[LeadingCandidate] = []
+    errors: list[tuple[str, str]] = []
+    symbols = _leading_kr_symbol_pool(options["limit"], use_universe=options["use_universe"])
+    name_map = _ticker_name_map()
+    for symbol in symbols:
+        ticker = symbol.removeprefix("KRX:")
+        name = name_map.get(ticker, ticker)
+        try:
+            supply = fetch_supply(ticker)
+            technical = fetch_technical(ticker)
+            fundamental = fetch_fundamental(ticker)
+            audit = fetch_audit_firm(ticker)
+            candidates.append(
+                score_leading_candidate(
+                    symbol=symbol,
+                    name=name,
+                    supply=supply,
+                    technical=technical,
+                    fundamental=fundamental,
+                    auditor=_leading_auditor_summary(audit),
+                )
+            )
+        except Exception as exc:
+            errors.append((symbol, str(exc)))
+    return format_leading_report(
+        candidates,
+        scanned=len(symbols),
+        errors=errors,
+        limit=options["output_limit"],
+    )
+
+
+def parse_leading_discovery_args(args: list[str]) -> dict:
+    limit = 25
+    output_limit = 12
+    use_universe = False
+    for arg in args:
+        lowered = arg.strip().lower()
+        if lowered in {"", "kr", "국장", "korea"}:
+            continue
+        if lowered in {"관심", "universe", "watchlist", "watchlists"}:
+            use_universe = True
+            continue
+        if lowered.isdigit():
+            limit = max(1, min(int(lowered), 80))
+            output_limit = max(1, min(int(lowered), 20))
+    return {"market": "KR", "limit": limit, "output_limit": output_limit, "use_universe": use_universe}
+
+
+def _leading_kr_symbol_pool(limit: int, *, use_universe: bool) -> list[str]:
+    symbols: list[str] = []
+    if use_universe:
+        snapshot = _load_universe_snapshot()
+        if snapshot is not None:
+            symbols.extend(
+                symbol
+                for symbol, meta in snapshot.symbols.items()
+                if symbol.startswith("KRX:") and meta.asset_type == "EQUITY"
+            )
+    symbols.extend(seed.symbol for seed in KR_CANDIDATE_SEEDS)
+    deduped = list(dict.fromkeys(symbols))
+    return deduped[:limit]
+
+
+def _ticker_name_map() -> dict[str, str]:
+    try:
+        return {str(item["code"]): str(item["name"]) for item in load_ticker_cache()}
+    except Exception:
+        return {seed.symbol.removeprefix("KRX:"): seed.name for seed in KR_CANDIDATE_SEEDS}
+
+
+def _leading_auditor_summary(audit: dict) -> str:
+    labels = {
+        "BLOCKED_CONFIRMED": "독립성 차단",
+        "BLOCKED_POSSIBLE": "독립성 차단 가능",
+        "CLEAR_CONFIRMED": "차단 없음",
+        "ROLLOVER_INFERRED": "감사인 추정 확인 필요",
+        "MANUAL_VERIFY_CURRENT_YEAR": "현재연도 감사인 확인 필요",
+        "DATA_MISSING": "감사인 데이터 없음",
+    }
+    decision = decide_independence(Market("KR", "한국"), audit)
+    return f"{labels.get(decision.status, decision.status)} · {decision.auditor or '-'}"
+
+
 def parse_tradingview_scan_args(args: list[str]) -> dict:
     market: str | None = None
     limit = 5
@@ -481,6 +577,14 @@ def parse_tradingview_scan_text(text: str) -> list[str] | None:
     if normalized in {"진입", "매수", "entry", "entries"}:
         return ["활성만", "점수", "50", "동기화", *args]
     if normalized in _TRADINGVIEW_SCAN_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
+def parse_leading_discovery_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _LEADING_DISCOVERY_TEXT_SHORTCUTS:
         return args
     return None
 
@@ -633,6 +737,22 @@ async def handle_tradingview_scan_command(update: Update, context) -> None:
     await loading.edit_text(_truncate_telegram_text(text))
 
 
+async def handle_leading_discovery_command(update: Update, context) -> None:
+    """/선행 텍스트 트리거. 수급+기술 전조로 국장 선행 후보를 압축한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
+    try:
+        text = await asyncio.to_thread(render_leading_discovery, args or ["kr"])
+    except Exception as exc:
+        logger.exception("leading discovery failed")
+        await loading.edit_text(f"⚠️ 선행 후보 스캔 실패: {exc!s}")
+        return
+    await loading.edit_text(_truncate_telegram_text(text))
+
+
 async def handle_korean_stock_command(update: Update, context) -> None:
     """/종목 텍스트 트리거. 종목 리서치와 현재 TradingView Lazy Alpha 판단을 함께 보여준다."""
     if not await check_allowed(update):
@@ -745,6 +865,17 @@ async def handle_text(update: Update, context) -> None:
             return
         await loading.edit_text(_truncate_telegram_text(text))
         return
+    leading_args = parse_leading_discovery_text(query)
+    if leading_args is not None:
+        loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
+        try:
+            text = await asyncio.to_thread(render_leading_discovery, leading_args or ["kr"])
+        except Exception as exc:
+            logger.exception("leading discovery failed")
+            await loading.edit_text(f"⚠️ 선행 후보 스캔 실패: {exc!s}")
+            return
+        await loading.edit_text(_truncate_telegram_text(text))
+        return
     await _lookup_and_reply(update, query)
 
 
@@ -799,6 +930,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("buy", handle_buy_console))
     tg_app.add_handler(CommandHandler("sell", handle_sell_console))
     tg_app.add_handler(CommandHandler("signal", handle_signal_detail))
+    tg_app.add_handler(CommandHandler(["leading", "discover"], handle_leading_discovery_command))
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
@@ -818,6 +950,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:스캔|현재신호|국장스캔|진입|매수)(?:@\S+)?(?:\s+.*)?$"),
             handle_tradingview_scan_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:선행|발굴)(?:@\S+)?(?:\s+.*)?$"),
+            handle_leading_discovery_command,
         )
     )
     tg_app.add_handler(
