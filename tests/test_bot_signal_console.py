@@ -501,6 +501,13 @@ def test_render_recommendation_cache_reports_stats_and_clear(monkeypatch, tmp_pa
     assert "유효: 1건" in text
     assert "만료: 1건" in text
 
+    pruned = bot.render_recommendation_cache(["정리"])
+
+    assert "만료 정리 완료" in pruned
+    assert "삭제 1건" in pruned
+    assert cache.stats()["total"] == 1
+    assert cache.stats()["active"] == 1
+
     cleared = bot.render_recommendation_cache(["초기화"])
 
     assert "초기화 완료" in cleared

@@ -699,6 +699,16 @@ def render_recommendation_cache(args: list[str]) -> str:
     if any(arg in {"초기화", "삭제", "clear", "reset"} for arg in normalized_args):
         deleted = cache.clear()
         return f"🧰 추천 스캔 캐시\n초기화 완료 · 삭제 {deleted}건"
+    if any(arg in {"정리", "청소", "prune", "clean", "cleanup"} for arg in normalized_args):
+        deleted = cache.prune_expired()
+        stats = cache.stats()
+        return "\n".join(
+            [
+                "🧰 추천 스캔 캐시",
+                f"만료 정리 완료 · 삭제 {deleted}건",
+                f"남은 캐시: 전체 {stats['total']}건 · 유효 {stats['active']}건 · 만료 {stats['expired']}건",
+            ]
+        )
 
     stats = cache.stats()
     lines = [
@@ -707,6 +717,7 @@ def render_recommendation_cache(args: list[str]) -> str:
         f"TTL: {_fmt_duration_ko(stats['ttl_seconds'])}",
         "",
         "강제 새로고침: /추천 us 10 동기화",
+        "만료 정리: /추천캐시 정리",
         "초기화: /추천캐시 초기화",
     ]
     return "\n".join(lines)

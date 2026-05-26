@@ -74,6 +74,16 @@ class TradingViewScanCache:
             conn.commit()
         return int(deleted or 0)
 
+    def prune_expired(self) -> int:
+        cutoff = int(time.time()) - self._ttl_seconds
+        with self._connect() as conn:
+            deleted = conn.execute(
+                "DELETE FROM tradingview_scan_cache WHERE fetched_at < ?",
+                (cutoff,),
+            ).rowcount
+            conn.commit()
+        return int(deleted or 0)
+
     def _init(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
