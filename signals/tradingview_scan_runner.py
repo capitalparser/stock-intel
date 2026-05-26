@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from collections import Counter
@@ -49,9 +50,10 @@ class KrSignalEnrichment:
 
 
 class TradingViewCli:
-    def __init__(self, mcp_dir: Path) -> None:
+    def __init__(self, mcp_dir: Path, *, timeout_seconds: float | None = None) -> None:
         self.mcp_dir = mcp_dir
         self.cli = ["node", "src/cli/index.js"]
+        self.timeout_seconds = timeout_seconds or float(os.getenv("TRADINGVIEW_CLI_TIMEOUT", "30"))
 
     def run(self, args: list[str]) -> dict:
         result = subprocess.run(
@@ -60,6 +62,7 @@ class TradingViewCli:
             check=True,
             capture_output=True,
             text=True,
+            timeout=self.timeout_seconds,
         )
         return json.loads(result.stdout)
 

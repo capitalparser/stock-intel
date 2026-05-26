@@ -1,7 +1,9 @@
 import json
+import subprocess
 from pathlib import Path
 
 from signals.tradingview_scan_runner import (
+    TradingViewCli,
     build_kr_signal_enrichments,
     format_telegram_exclusion_cards,
     format_scan_report,
@@ -51,6 +53,23 @@ def test_market_for_symbol_includes_japan():
     assert market_for_symbol("KRX:005930") == "KR"
     assert market_for_symbol("NASDAQ:AAPL") == "US"
     assert market_for_symbol("TSE:7203") == "JP"
+
+
+def test_tradingview_cli_run_uses_timeout(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["timeout"] = kwargs.get("timeout")
+        return subprocess.CompletedProcess(command, 0, stdout='{"success": true}', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = TradingViewCli(tmp_path, timeout_seconds=7).run(["symbol", "KRX:035420"])
+
+    assert result == {"success": True}
+    assert captured["command"][-2:] == ["symbol", "KRX:035420"]
+    assert captured["timeout"] == 7
 
 
 def test_format_scan_report_includes_webhook_distinction_when_empty():

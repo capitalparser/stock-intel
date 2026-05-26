@@ -475,6 +475,7 @@ def render_tradingview_scan(args: list[str]) -> str:
         bars=500,
         max_labels=250,
         timeframe="D",
+        entry_policy="last",
         sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
     )
     outcomes = result.outcomes

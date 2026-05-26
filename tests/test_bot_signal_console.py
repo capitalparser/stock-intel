@@ -196,6 +196,28 @@ def test_render_lazy_alpha_status_scans_single_symbol_with_latest_cluster_policy
     assert captured["duplicate_window_bars"] == 5
 
 
+def test_render_tradingview_scan_uses_latest_cluster_policy(monkeypatch):
+    captured = {}
+
+    def fake_scan(symbols, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            outcomes=[],
+            exclusions=[],
+            errors=[],
+            scanned=symbols,
+            label_flows={},
+            table_snapshots={},
+        )
+
+    monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
+    monkeypatch.setattr(bot, "build_kr_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    bot.render_tradingview_scan(["KRX:437730"])
+
+    assert captured["entry_policy"] == "last"
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",
