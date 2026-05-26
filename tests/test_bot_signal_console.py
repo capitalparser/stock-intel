@@ -427,6 +427,19 @@ def test_parse_tradingview_scan_text_supports_korean_scan_command():
     assert bot.parse_tradingview_scan_text("삼성전자") is None
 
 
+def test_parse_tradingview_scan_args_marks_only_user_symbols_as_explicit(monkeypatch, tmp_path):
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setattr(bot, "sync_universe_from_tradingview", lambda **kwargs: None)
+    monkeypatch.setattr(bot, "symbols_from_universe", lambda path, limit, market=None: ["NASDAQ:MSFT"][:limit])
+
+    universe_options = bot.parse_tradingview_scan_args(["활성만", "점수", "50", "동기화", "us", "1"])
+    explicit_options = bot.parse_tradingview_scan_args(["us", "NASDAQ:AAPL"])
+
+    assert universe_options["symbols"] == ["NASDAQ:MSFT"]
+    assert universe_options["explicit_symbols"] is False
+    assert explicit_options["explicit_symbols"] is True
+
+
 def test_parse_lazy_alpha_transition_text_supports_korean_command():
     assert bot.parse_lazy_alpha_transition_text("/변화 kr 50") == ["kr", "50"]
     assert bot.parse_lazy_alpha_transition_text("상태변화 전체 us 80") == ["전체", "us", "80"]
@@ -648,6 +661,85 @@ def test_render_signal_recommendations_supplements_universe_after_initial_errors
     assert calls == [["AMEX:BMNR"], ["NASDAQ:AAPL", "NYSE:PLTR"]]
     assert "NASDAQ:AAPL" in text
     assert "오류: AMEX:BMNR" in text
+
+
+def test_render_signal_recommendations_supplements_when_initial_scan_has_no_candidate(monkeypatch, tmp_path):
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setattr(
+        bot,
+        "parse_tradingview_scan_args",
+        lambda args: {"symbols": ["NASDAQ:MSFT"], "market": "US", "limit": 1, "explicit_symbols": False},
+    )
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: ["NASDAQ:MSFT", "NASDAQ:AAPL", "NYSE:PLTR"][:limit],
+    )
+    calls = []
+
+    def fake_scan(symbols, batch_size):
+        calls.append(list(symbols))
+        if symbols == ["NASDAQ:MSFT"]:
+            return (
+                SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=["NASDAQ:MSFT"], label_flows={}, table_snapshots={}),
+                1,
+            )
+        return (
+            SimpleNamespace(outcomes=[outcome], exclusions=[], errors=[], scanned=["NASDAQ:AAPL"], label_flows={}, table_snapshots={}),
+            1,
+        )
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    text = bot.render_signal_recommendations(["us", "1"])
+
+    assert calls == [["NASDAQ:MSFT"], ["NASDAQ:AAPL", "NYSE:PLTR"]]
+    assert "NASDAQ:AAPL" in text
+
+
+def test_render_signal_recommendations_does_not_supplement_explicit_symbol(monkeypatch, tmp_path):
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setattr(
+        bot,
+        "parse_tradingview_scan_args",
+        lambda args: {"symbols": ["NASDAQ:MSFT"], "market": "US", "limit": 1, "explicit_symbols": True},
+    )
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: ["NASDAQ:MSFT", "NASDAQ:AAPL", "NYSE:PLTR"][:limit],
+    )
+    calls = []
+
+    def fake_scan(symbols, batch_size):
+        calls.append(list(symbols))
+        return (
+            SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=["NASDAQ:MSFT"], label_flows={}, table_snapshots={}),
+            1,
+        )
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    text = bot.render_signal_recommendations(["NASDAQ:MSFT"])
+
+    assert calls == [["NASDAQ:MSFT"]]
+    assert "표시할 추천 후보가 없습니다." in text
 
 
 def test_strip_korean_slash_command_handles_args_and_bot_suffix():
