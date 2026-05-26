@@ -268,6 +268,54 @@ def test_render_tradingview_scan_batches_full_universe(monkeypatch, tmp_path):
     assert "요청: 5종목 · 배치: 3회" in text
 
 
+def test_render_lazy_alpha_transitions_records_and_reports_changes(monkeypatch, tmp_path):
+    db_path = tmp_path / "state.db"
+    monkeypatch.setenv("STATE_DB_PATH", str(db_path))
+    monkeypatch.setattr(bot, "parse_tradingview_scan_args", lambda args: {"symbols": ["KRX:437730"]})
+    scans = [
+        SimpleNamespace(
+            outcomes=[],
+            exclusions=[],
+            errors=[],
+            scanned=["KRX:437730"],
+            label_flows={"KRX:437730": [TradingViewLabelFlowItem("2026-05-25", "🛠️ 셋업 형성 중", 10)]},
+            table_snapshots={},
+        ),
+        SimpleNamespace(
+            outcomes=[
+                TradingViewLabelOutcome(
+                    symbol="KRX:437730",
+                    market="KR",
+                    signal_date="2026-05-26",
+                    first_signal_date="2026-05-26",
+                    last_signal_date="2026-05-26",
+                    duplicate_count=1,
+                    label="🚀 돌파 진입",
+                    entry_price=60000,
+                    returns={},
+                    context={},
+                    risk_flags=[],
+                    score_penalty_hint=0,
+                )
+            ],
+            exclusions=[],
+            errors=[],
+            scanned=["KRX:437730"],
+            label_flows={},
+            table_snapshots={},
+        ),
+    ]
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", lambda symbols, batch_size: (scans.pop(0), 1))
+
+    first = bot.render_lazy_alpha_transition_report(["kr"])
+    second = bot.render_lazy_alpha_transition_report(["kr"])
+
+    assert "새로 알릴 상태 전환이 없습니다." in first
+    assert "전환: SETUP → ACTIVE_BUY" in second
+    assert "현재: 2026-05-26 · 🚀 돌파 진입" in second
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",
@@ -358,6 +406,12 @@ def test_parse_tradingview_scan_text_supports_korean_scan_command():
     assert bot.parse_tradingview_scan_text("krscan 20") == ["국장", "점수", "50", "동기화", "20"]
     assert bot.parse_tradingview_scan_text("/tvscan KRX:005930") == ["KRX:005930"]
     assert bot.parse_tradingview_scan_text("삼성전자") is None
+
+
+def test_parse_lazy_alpha_transition_text_supports_korean_command():
+    assert bot.parse_lazy_alpha_transition_text("/변화 kr 50") == ["kr", "50"]
+    assert bot.parse_lazy_alpha_transition_text("상태변화 전체 us 80") == ["전체", "us", "80"]
+    assert bot.parse_lazy_alpha_transition_text("삼성전자") is None
 
 
 def test_parse_leading_discovery_text_supports_korean_command():

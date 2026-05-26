@@ -50,6 +50,11 @@ from signals.console import (
 )
 from signals.independence import decide_independence
 from signals.kr_watch_candidates import KR_CANDIDATE_SEEDS
+from signals.lazy_alpha_transitions import (
+    LazyAlphaTransitionStore,
+    build_symbol_states_from_scan,
+    format_transition_report,
+)
 from signals.leading_discovery import (
     LeadingCandidate,
     format_leading_report,
@@ -58,6 +63,7 @@ from signals.leading_discovery import (
 from signals.market import Market
 from signals.tradingview_direct import TradingViewTableSnapshot, evaluate_lazy_alpha_state, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
+from signals.telegram import send_telegram_message
 from signals.tradingview_scan_runner import (
     TradingViewScanResult,
     adjusted_priority_penalty,
@@ -111,6 +117,7 @@ HELP_TEXT = (
     "/신호 — Lazy Alpha 버튼 콘솔\n"
     "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
+    "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
     "/국장스캔 — TradingView 국장 watchlist 기술점수 스캔\n"
     "/스캔 us 5 — 관심 universe 중 미국 5종목 직접 스캔\n"
@@ -125,6 +132,7 @@ HELP_TEXT = (
 _HELP_TEXT_SHORTCUTS = {"기능", "도움말", "메뉴", "help"}
 _SIGNAL_CONSOLE_TEXT_SHORTCUTS = {"시그널", "신호", "signals", "signal"}
 _TRADINGVIEW_SCAN_TEXT_SHORTCUTS = {"스캔", "현재신호", "국장스캔", "tvscan", "scan", "krscan"}
+_LAZY_ALPHA_TRANSITION_TEXT_SHORTCUTS = {"변화", "상태변화", "전환", "알림", "changes", "transition", "transitions"}
 _LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", "discovery"}
 
 # ---------------------------------------------------------------------------
@@ -142,6 +150,15 @@ scheduler.add_job(
     id="refresh_ticker_cache",
     replace_existing=True,
 )
+
+
+async def _scheduled_lazy_alpha_transition_alert() -> None:
+    args = os.getenv("LAZY_ALPHA_TRANSITION_ALERT_ARGS", "전체 kr 80").split()
+    text = await asyncio.to_thread(render_lazy_alpha_transition_report, args)
+    if "새로 알릴 상태 전환이 없습니다." in text:
+        logger.info("Lazy Alpha 상태 전환 없음")
+        return
+    await send_telegram_message(TOKEN, sorted(ALLOWED_IDS), text)
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +464,10 @@ def _signal_store() -> SignalStore:
     return SignalStore(os.getenv("STATE_DB_PATH", "./state.db"))
 
 
+def _transition_store() -> LazyAlphaTransitionStore:
+    return LazyAlphaTransitionStore(os.getenv("STATE_DB_PATH", "./state.db"))
+
+
 def _universe_snapshot_path() -> str:
     return os.getenv("UNIVERSE_SNAPSHOT_PATH", "./state/universe_snapshot.json")
 
@@ -545,6 +566,21 @@ def render_tradingview_scan(args: list[str]) -> str:
         include_exclusions=options["include_exclusions"],
         requested_count=len(options["symbols"]),
         batch_count=batch_count,
+    )
+
+
+def render_lazy_alpha_transition_report(args: list[str]) -> str:
+    options = parse_tradingview_scan_args(args)
+    result, _batch_count = _scan_tradingview_symbols_batched(
+        options["symbols"],
+        batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
+    )
+    states = build_symbol_states_from_scan(result)
+    transitions = _transition_store().record_states(states)
+    return format_transition_report(
+        transitions,
+        scanned_count=len(result.scanned),
+        errors=result.errors,
     )
 
 
@@ -757,6 +793,14 @@ def parse_tradingview_scan_text(text: str) -> list[str] | None:
     return None
 
 
+def parse_lazy_alpha_transition_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _LAZY_ALPHA_TRANSITION_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
 def parse_leading_discovery_text(text: str) -> list[str] | None:
     command, args = _strip_korean_slash_command(text)
     normalized = command.strip().lower()
@@ -913,6 +957,22 @@ async def handle_tradingview_scan_command(update: Update, context) -> None:
     await loading.edit_text(_truncate_telegram_text(text))
 
 
+async def handle_lazy_alpha_transition_command(update: Update, context) -> None:
+    """/변화 텍스트 트리거. 이전 스캔 대비 Lazy Alpha 상태 전환만 보여준다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    loading = await update.message.reply_text("🔔 Lazy Alpha 상태 변화 확인 중... 이전 관측과 비교합니다.")
+    try:
+        text = await asyncio.to_thread(render_lazy_alpha_transition_report, args or ["kr"])
+    except Exception as exc:
+        logger.exception("lazy alpha transition scan failed")
+        await loading.edit_text(f"⚠️ 상태 변화 확인 실패: {exc!s}")
+        return
+    await loading.edit_text(_truncate_telegram_text(text))
+
+
 async def handle_leading_discovery_command(update: Update, context) -> None:
     """/선행 텍스트 트리거. 수급+기술 전조로 국장 선행 후보를 압축한다."""
     if not await check_allowed(update):
@@ -1041,6 +1101,17 @@ async def handle_text(update: Update, context) -> None:
             return
         await loading.edit_text(_truncate_telegram_text(text))
         return
+    transition_args = parse_lazy_alpha_transition_text(query)
+    if transition_args is not None:
+        loading = await update.message.reply_text("🔔 Lazy Alpha 상태 변화 확인 중... 이전 관측과 비교합니다.")
+        try:
+            text = await asyncio.to_thread(render_lazy_alpha_transition_report, transition_args or ["kr"])
+        except Exception as exc:
+            logger.exception("lazy alpha transition scan failed")
+            await loading.edit_text(f"⚠️ 상태 변화 확인 실패: {exc!s}")
+            return
+        await loading.edit_text(_truncate_telegram_text(text))
+        return
     leading_args = parse_leading_discovery_text(query)
     if leading_args is not None:
         loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
@@ -1086,6 +1157,17 @@ async def handle_callback(update: Update, context) -> None:
 # 진입점
 # ---------------------------------------------------------------------------
 async def post_init(application: Application) -> None:
+    if os.getenv("LAZY_ALPHA_TRANSITION_ALERT_ENABLED", "0") in {"1", "true", "True", "yes"}:
+        scheduler.add_job(
+            _scheduled_lazy_alpha_transition_alert,
+            CronTrigger(
+                hour=int(os.getenv("LAZY_ALPHA_TRANSITION_ALERT_HOUR", "16")),
+                minute=int(os.getenv("LAZY_ALPHA_TRANSITION_ALERT_MINUTE", "10")),
+                timezone=_KST,
+            ),
+            id="lazy_alpha_transition_alert",
+            replace_existing=True,
+        )
     scheduler.start()
     logger.info("봇 시작. 종목 캐시 갱신 스케줄: 매일 07:00 KST")
 
@@ -1109,6 +1191,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler(["leading", "discover"], handle_leading_discovery_command))
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
+    tg_app.add_handler(CommandHandler(["changes", "transition", "transitions"], handle_lazy_alpha_transition_command))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
     tg_app.add_handler(
         MessageHandler(
@@ -1126,6 +1209,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:스캔|현재신호|국장스캔|진입|매수)(?:@\S+)?(?:\s+.*)?$"),
             handle_tradingview_scan_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:변화|상태변화|전환|알림)(?:@\S+)?(?:\s+.*)?$"),
+            handle_lazy_alpha_transition_command,
         )
     )
     tg_app.add_handler(
