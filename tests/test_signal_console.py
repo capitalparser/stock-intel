@@ -115,7 +115,7 @@ def test_parse_console_args_keeps_buy_kr_8h_state():
 
 
 def test_parse_console_args_supports_recent_event_view():
-    state = parse_console_args(["recent", "sell", "jp", "24h"])
+    state = parse_console_args(["recent", "sell", "일장", "24h"])
 
     assert state.view == "RECENT"
     assert state.tab == "SELL"
@@ -124,10 +124,15 @@ def test_parse_console_args_supports_recent_event_view():
 
 
 def test_parse_console_args_supports_score_sort():
-    state = parse_console_args(["kr", "점수"])
+    state = parse_console_args(["한국장", "점수"])
 
     assert state.market == "KR"
     assert state.sort == "SCORE"
+
+
+def test_parse_console_args_supports_us_market_korean_aliases():
+    assert parse_console_args(["미장"]).market == "US"
+    assert parse_console_args(["미국장"]).market == "US"
 
 
 def test_format_console_filters_recent_buy_kr_rows(tmp_path):

@@ -53,11 +53,11 @@ def parse_console_args(args: list[str]) -> ConsoleState:
             tab = "SELL"
         elif value in {"review", "manual", "확인필요"}:
             tab = "REVIEW"
-        elif value in {"kr", "국장"}:
+        elif value in {"kr", "국장", "한국", "한국장"}:
             market = "KR"
-        elif value in {"us", "미국"}:
+        elif value in {"us", "미국", "미장", "미국장"}:
             market = "US"
-        elif value in {"jp", "일본"}:
+        elif value in {"jp", "일본", "일장", "일본장"}:
             market = "JP"
         elif value in {"score", "scores", "점수", "점수순", "rank", "ranking"}:
             sort = "SCORE"

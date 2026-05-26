@@ -1020,13 +1020,13 @@ def parse_backtest_args(args: list[str]) -> dict:
         lowered = arg.strip().lower()
         if not lowered:
             continue
-        if lowered in {"kr", "국장", "한국", "korea"}:
+        if lowered in {"kr", "국장", "한국", "한국장", "korea"}:
             market = "KR"
             continue
-        if lowered in {"us", "미장", "미국", "usa"}:
+        if lowered in {"us", "미장", "미국", "미국장", "usa"}:
             market = "US"
             continue
-        if lowered in {"jp", "일본", "japan"}:
+        if lowered in {"jp", "일본", "일장", "일본장", "japan"}:
             market = "JP"
             continue
         if lowered.isdigit():
@@ -1108,13 +1108,13 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         if lowered in {"sync", "동기화", "현재"}:
             sync = True
             continue
-        if lowered in {"kr", "국장", "한국", "korea"}:
+        if lowered in {"kr", "국장", "한국", "한국장", "korea"}:
             market = "KR"
             continue
-        if lowered in {"us", "미장", "미국", "usa"}:
+        if lowered in {"us", "미장", "미국", "미국장", "usa"}:
             market = "US"
             continue
-        if lowered in {"jp", "일본", "japan"}:
+        if lowered in {"jp", "일본", "일장", "일본장", "japan"}:
             market = "JP"
             continue
         if lowered in {"점수", "점수순", "score", "scores", "rank"}:

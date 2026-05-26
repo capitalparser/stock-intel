@@ -569,13 +569,15 @@ def test_parse_tradingview_scan_args_marks_only_user_symbols_as_explicit(monkeyp
 
     universe_options = bot.parse_tradingview_scan_args(["활성만", "점수", "50", "동기화", "us", "1"])
     explicit_options = bot.parse_tradingview_scan_args(["us", "NASDAQ:AAPL"])
-    korean_market_options = bot.parse_tradingview_scan_args(["미국", "1"])
+    korean_market_options = bot.parse_tradingview_scan_args(["미국장", "1"])
+    jp_market_options = bot.parse_tradingview_scan_args(["일장", "1"])
 
     assert universe_options["symbols"] == ["NASDAQ:MSFT"]
     assert universe_options["explicit_symbols"] is False
     assert explicit_options["explicit_symbols"] is True
     assert korean_market_options["market"] == "US"
     assert korean_market_options["symbols"] == ["NASDAQ:MSFT"]
+    assert jp_market_options["market"] == "JP"
 
 
 def test_parse_lazy_alpha_transition_text_supports_korean_command():
@@ -593,6 +595,7 @@ def test_parse_leading_discovery_text_supports_korean_command():
 def test_parse_backtest_text_supports_korean_command():
     assert bot.parse_backtest_text("/검증 kr 20") == ["kr", "20"]
     assert bot.parse_backtest_text("백테스트 국장 50") == ["국장", "50"]
+    assert bot.parse_backtest_args(["일본장", "10"]) == {"market": "JP", "limit": 10}
     assert bot.parse_backtest_text("삼성전자") is None
 
 
@@ -600,6 +603,7 @@ def test_parse_recommendation_text_supports_korean_command():
     assert bot.parse_recommendation_text("/추천 kr 20") == ["kr", "20"]
     assert bot.parse_recommendation_text("후보 us 30") == ["us", "30"]
     assert bot.parse_recommendation_text("추천 미국 10") == ["미국", "10"]
+    assert bot.parse_recommendation_text("추천 일장 10") == ["일장", "10"]
     assert bot.parse_recommendation_text("삼성전자") is None
 
 
