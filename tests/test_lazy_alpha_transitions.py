@@ -10,6 +10,7 @@ from signals.tradingview_direct import (
     TradingViewExcludedSignal,
     TradingViewLabelFlowItem,
     TradingViewLabelOutcome,
+    TradingViewTableSnapshot,
 )
 
 
@@ -88,6 +89,61 @@ def test_build_symbol_states_detects_setup_entry_and_exit_from_scan_result():
     assert states["KRX:321370"].state_key == "SETUP"
     assert states["KRX:300080"].state_key == "EXIT"
     assert states["KRX:300080"].verdict == "매수 금지"
+
+
+def test_build_symbol_states_marks_active_label_with_bearish_table_as_blocked():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-21",
+        first_signal_date="2026-05-21",
+        last_signal_date="2026-05-21",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=10860,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    result = SimpleNamespace(
+        outcomes=[outcome],
+        exclusions=[],
+        scanned=["KRX:300080"],
+        label_flows={},
+        table_snapshots={
+            "KRX:300080": TradingViewTableSnapshot(
+                signal="⚪️ 관망",
+                conviction="🔴 D (역배열/꼬임)",
+                smart_eval="떨어지는 칼날 (접근 금지)",
+                ema_alignment="🔴 약배열 (유지)",
+                aux_score=1,
+                aux_signal="대기",
+                market_sector=None,
+                trend_energy=None,
+                market_control="🐻 매도세 (우위)",
+                rs_score=17,
+                volume_strength=1.33,
+                high_52w_pct=-55.1,
+                stop_loss=None,
+                stop_loss_pct=None,
+                target_price=None,
+                target_return_pct=None,
+                risk_reward=None,
+                buy_eligibility="⚠️ 미충족  진입",
+                fundamental=None,
+                eps_growth=[],
+                sales_growth=[],
+                raw_rows=[],
+            )
+        },
+    )
+
+    states = {state.symbol: state for state in build_symbol_states_from_scan(result)}
+
+    assert states["KRX:300080"].state_key == "BLOCKED_BUY"
+    assert states["KRX:300080"].verdict == "매수 금지"
+    assert states["KRX:300080"].action == "추세 회복 전까지 제외"
 
 
 def test_format_transition_report_is_telegram_friendly(tmp_path):

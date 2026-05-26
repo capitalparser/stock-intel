@@ -12,6 +12,7 @@ from pathlib import Path
 from signals.tradingview_direct import (
     TradingViewExcludedSignal,
     TradingViewLabelOutcome,
+    TradingViewTableSnapshot,
     evaluate_lazy_alpha_state,
 )
 
@@ -138,8 +139,12 @@ class LazyAlphaTransitionStore:
 
 def build_symbol_states_from_scan(result) -> list[SymbolLazyAlphaState]:
     states: dict[str, SymbolLazyAlphaState] = {}
+    table_snapshots = getattr(result, "table_snapshots", {}) or {}
     for outcome in getattr(result, "outcomes", []):
-        states[outcome.symbol] = _state_from_outcome(outcome)
+        states[outcome.symbol] = _state_from_outcome(
+            outcome,
+            table_snapshots.get(outcome.symbol),
+        )
     for exclusion in _latest_exclusions_by_symbol(getattr(result, "exclusions", [])):
         if exclusion.symbol not in states:
             states[exclusion.symbol] = _state_from_exclusion(exclusion)
@@ -190,21 +195,37 @@ def _state_changed(previous: sqlite3.Row, current: SymbolLazyAlphaState) -> bool
     )
 
 
-def _state_from_outcome(outcome: TradingViewLabelOutcome) -> SymbolLazyAlphaState:
+def _state_from_outcome(
+    outcome: TradingViewLabelOutcome,
+    table: TradingViewTableSnapshot | None = None,
+) -> SymbolLazyAlphaState:
     decision = evaluate_lazy_alpha_state(
         outcome_label=outcome.label,
+        table_signal=table.signal if table else None,
+        table_conviction=table.conviction if table else None,
+        table_buy_eligibility=table.buy_eligibility if table else None,
+        table_score=table.aux_score if table else None,
         penalty=outcome.score_penalty_hint,
         outcome=outcome,
     )
+    state_key = _state_key_from_decision(decision.verdict)
     return SymbolLazyAlphaState(
         symbol=outcome.symbol,
         market=outcome.market,
-        state_key="ACTIVE_BUY",
+        state_key=state_key,
         label=outcome.label,
         label_date=outcome.signal_date,
         verdict=decision.verdict,
         action=decision.action,
     )
+
+
+def _state_key_from_decision(verdict: str) -> str:
+    if verdict == "매수 금지":
+        return "BLOCKED_BUY"
+    if verdict == "추격 주의":
+        return "CAUTION_BUY"
+    return "ACTIVE_BUY"
 
 
 def _state_from_exclusion(exclusion: TradingViewExcludedSignal) -> SymbolLazyAlphaState:

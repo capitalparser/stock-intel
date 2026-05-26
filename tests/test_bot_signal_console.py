@@ -377,6 +377,80 @@ def test_render_lazy_alpha_transitions_records_and_reports_changes(monkeypatch, 
     assert "현재: 2026-05-26 · 🚀 돌파 진입" in second
 
 
+def test_render_lazy_alpha_transitions_reports_blocked_buy_when_table_conflicts(monkeypatch, tmp_path):
+    db_path = tmp_path / "state.db"
+    monkeypatch.setenv("STATE_DB_PATH", str(db_path))
+    monkeypatch.setattr(bot, "parse_tradingview_scan_args", lambda args: {"symbols": ["KRX:300080"]})
+    scans = [
+        SimpleNamespace(
+            outcomes=[],
+            exclusions=[],
+            errors=[],
+            scanned=["KRX:300080"],
+            label_flows={"KRX:300080": [TradingViewLabelFlowItem("2026-05-25", "🛠️ 셋업 형성 중", 10)]},
+            table_snapshots={},
+        ),
+        SimpleNamespace(
+            outcomes=[
+                TradingViewLabelOutcome(
+                    symbol="KRX:300080",
+                    market="KR",
+                    signal_date="2026-05-26",
+                    first_signal_date="2026-05-26",
+                    last_signal_date="2026-05-26",
+                    duplicate_count=1,
+                    label="💰 진입",
+                    entry_price=10860,
+                    returns={},
+                    context={},
+                    risk_flags=[],
+                    score_penalty_hint=0,
+                )
+            ],
+            exclusions=[],
+            errors=[],
+            scanned=["KRX:300080"],
+            label_flows={},
+            table_snapshots={
+                "KRX:300080": TradingViewTableSnapshot(
+                    signal="⚪️ 관망",
+                    conviction="🔴 D (역배열/꼬임)",
+                    smart_eval="떨어지는 칼날 (접근 금지)",
+                    ema_alignment="🔴 약배열 (유지)",
+                    aux_score=1,
+                    aux_signal="대기",
+                    market_sector=None,
+                    trend_energy=None,
+                    market_control="🐻 매도세 (우위)",
+                    rs_score=17,
+                    volume_strength=1.33,
+                    high_52w_pct=-55.1,
+                    stop_loss=None,
+                    stop_loss_pct=None,
+                    target_price=None,
+                    target_return_pct=None,
+                    risk_reward=None,
+                    buy_eligibility="⚠️ 미충족  진입",
+                    fundamental=None,
+                    eps_growth=[],
+                    sales_growth=[],
+                    raw_rows=[],
+                )
+            },
+        ),
+    ]
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", lambda symbols, batch_size: (scans.pop(0), 1))
+
+    first = bot.render_lazy_alpha_transition_report(["kr"])
+    second = bot.render_lazy_alpha_transition_report(["kr"])
+
+    assert "새로 알릴 상태 전환이 없습니다." in first
+    assert "전환: SETUP → BLOCKED_BUY" in second
+    assert "판정: 매수 금지" in second
+    assert "행동: 추세 회복 전까지 제외" in second
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",
