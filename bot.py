@@ -99,6 +99,7 @@ HELP_TEXT = (
     "DM: 삼성전자 / SK하이닉스 / NAVER\n"
     "그룹: /종목 삼성전자 또는 /s 삼성전자\n\n"
     "/신호 — Lazy Alpha 버튼 콘솔\n"
+    "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
     "/국장스캔 — TradingView 국장 watchlist 기술점수 스캔\n"
     "/스캔 us 5 — 관심 universe 중 미국 5종목 직접 스캔\n"
@@ -394,6 +395,8 @@ def render_tradingview_scan(args: list[str]) -> str:
         errors=result.errors,
         scanned=result.scanned,
         enrichments=enrichments,
+        title=options["title"],
+        include_exclusions=options["include_exclusions"],
     )
 
 
@@ -402,6 +405,8 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
     limit = 5
     sort = "TIME"
     sync = False
+    include_exclusions = True
+    title = "📡 TradingView 직접 스캔"
     symbols: list[str] = []
     for arg in args:
         value = arg.strip()
@@ -423,6 +428,10 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         if lowered in {"점수", "점수순", "score", "scores", "rank"}:
             sort = "SCORE"
             continue
+        if lowered in {"활성", "활성만", "진입", "매수", "entry", "entries", "active", "buyonly"}:
+            include_exclusions = False
+            title = "📡 현재 진입/매수 후보"
+            continue
         if lowered.isdigit() and len(lowered) != 6:
             limit = max(1, min(int(lowered), 50))
             continue
@@ -437,7 +446,15 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=limit, market=market)
     else:
         symbols = symbols[:limit]
-    return {"symbols": symbols, "market": market, "limit": limit, "sort": sort, "sync": sync}
+    return {
+        "symbols": symbols,
+        "market": market,
+        "limit": limit,
+        "sort": sort,
+        "sync": sync,
+        "include_exclusions": include_exclusions,
+        "title": title,
+    }
 
 
 def is_help_text(text: str) -> bool:
@@ -461,6 +478,8 @@ def parse_tradingview_scan_text(text: str) -> list[str] | None:
     normalized = command.strip().lower()
     if normalized in {"국장스캔", "krscan"}:
         return ["국장", "점수", "50", "동기화", *args]
+    if normalized in {"진입", "매수", "entry", "entries"}:
+        return ["활성만", "점수", "50", "동기화", *args]
     if normalized in _TRADINGVIEW_SCAN_TEXT_SHORTCUTS:
         return args
     return None
@@ -601,7 +620,9 @@ async def handle_tradingview_scan_command(update: Update, context) -> None:
     if not await check_allowed(update):
         return
 
-    _command, args = _strip_korean_slash_command(update.message.text)
+    command, args = _strip_korean_slash_command(update.message.text)
+    if command.lower() in {"진입", "매수", "entry", "entries"}:
+        args = ["활성만", "점수", "50", "동기화", *args]
     loading = await update.message.reply_text("📡 TradingView 직접 스캔 중... 차트를 순차 확인합니다.")
     try:
         text = await asyncio.to_thread(render_tradingview_scan, args)
@@ -778,6 +799,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("buy", handle_buy_console))
     tg_app.add_handler(CommandHandler("sell", handle_sell_console))
     tg_app.add_handler(CommandHandler("signal", handle_signal_detail))
+    tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
     tg_app.add_handler(
@@ -794,7 +816,7 @@ async def _run() -> None:
     )
     tg_app.add_handler(
         MessageHandler(
-            filters.Regex(r"^/(?:스캔|현재신호|국장스캔)(?:@\S+)?(?:\s+.*)?$"),
+            filters.Regex(r"^/(?:스캔|현재신호|국장스캔|진입|매수)(?:@\S+)?(?:\s+.*)?$"),
             handle_tradingview_scan_command,
         )
     )

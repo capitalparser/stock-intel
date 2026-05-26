@@ -116,6 +116,35 @@ def test_format_scan_report_includes_exclusion_reason_cards():
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 
 
+def test_format_scan_report_can_hide_exclusions_for_current_entry_view():
+    exclusion = TradingViewExcludedSignal(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date=None,
+        exit_label="📉 모멘텀 SELL",
+        entry_bar_index=297,
+        exit_bar_index=409,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_scan_report(
+        outcomes=[],
+        exclusions=[exclusion],
+        errors=[],
+        scanned=["KRX:300080"],
+        title="📡 현재 진입/매수 후보",
+        include_exclusions=False,
+    )
+
+    assert "📡 현재 진입/매수 후보" in text
+    assert "활성 후보: 0건" in text
+    assert "제외 후보" not in text
+    assert "모멘텀 SELL" not in text
+
+
 def test_format_telegram_exclusion_cards_uses_korean_names():
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",

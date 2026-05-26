@@ -164,11 +164,17 @@ def format_scan_report(
     title: str = "📡 TradingView 직접 스캔",
     enrichments: dict[str, KrSignalEnrichment] | None = None,
     exclusions: list[TradingViewExcludedSignal] | None = None,
+    include_exclusions: bool = True,
 ) -> str:
+    exclusion_count = len(exclusions or [])
+    scan_summary = f"스캔: {len(scanned)}종목 · 활성 후보: {len(outcomes)}건"
+    if include_exclusions:
+        scan_summary += f" · 제외: {exclusion_count}건"
+    header = title if title.startswith("📡") else f"📡 TradingView 직접 스캔 — {title}"
     lines = [
-        f"📡 TradingView 직접 스캔 — {title}" if "TradingView 직접 스캔" not in title else title,
+        header,
         "기준: 웹훅 저장소가 아니라 현재 열린 TradingView 차트의 Lazy Alpha 라벨을 직접 읽음",
-        f"스캔: {len(scanned)}종목 · 활성 후보: {len(outcomes)}건 · 제외: {len(exclusions or [])}건",
+        scan_summary,
     ]
     if scanned:
         lines.append("대상: " + ", ".join(scanned[:12]))
@@ -181,7 +187,7 @@ def format_scan_report(
             enrichments=enrichments,
         )
     )
-    if exclusions:
+    if include_exclusions and exclusions:
         lines.append("")
         lines.extend(format_telegram_exclusion_cards(exclusions))
     return "\n".join(lines)
