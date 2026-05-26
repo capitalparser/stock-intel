@@ -154,6 +154,8 @@ STATE_DB_PATH=./state.db
 SIGNAL_CHAT_IDS=123456789
 TRADINGVIEW_SCAN_CACHE_PATH=./state/tradingview_scan_cache.sqlite3
 TRADINGVIEW_SCAN_CACHE_TTL_SECONDS=600
+RECOMMENDATION_ERROR_COOLDOWN_PATH=./state/recommendation_symbol_errors.json
+RECOMMENDATION_ERROR_COOLDOWN_SECONDS=21600
 ```
 
 `ALLOWED_CHAT_IDS`가 비어 있으면 모든 chat id를 허용합니다. 실사용 서버에서는 반드시 설정하는 것을 권장합니다.
@@ -161,6 +163,8 @@ TRADINGVIEW_SCAN_CACHE_TTL_SECONDS=600
 `SIGNAL_CHAT_IDS`가 비어 있으면 `ALLOWED_CHAT_IDS`를 TradingView 시그널 알림 대상 chat id로 재사용합니다.
 
 `/추천`은 TradingView 직접 스캔 결과를 기본 10분간 캐시합니다. 반복 조회 때 같은 watchlist 묶음을 빠르게 재사용하고, `/추천 us 10 동기화`처럼 `동기화`/`sync`를 붙이면 universe와 스캔 캐시를 우회해 새로 읽습니다.
+
+추천 스캔에서 TradingView가 열지 못한 심볼은 기본 6시간 동안 추천 후보 풀에서 잠시 제외합니다. watchlist 원본은 수정하지 않고, 같은 오류 심볼이 반복적으로 앞단을 막지 않도록 운영용 쿨다운만 적용합니다.
 
 ## Local Run
 

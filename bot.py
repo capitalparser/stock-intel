@@ -6,6 +6,7 @@ data/ 모듈은 모두 동기 함수 → asyncio.to_thread()로 래핑.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -610,6 +611,8 @@ def render_lazy_alpha_transition_report(args: list[str]) -> str:
 def render_signal_recommendations(args: list[str]) -> str:
     scan_args = ["활성만", "점수", "50", *args]
     options = parse_tradingview_scan_args(scan_args)
+    if not options.get("explicit_symbols"):
+        options = {**options, "symbols": _recommendation_initial_symbols(options)}
     result, _batch_count = _scan_tradingview_symbols_batched(
         options["symbols"],
         batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
@@ -617,6 +620,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         force_refresh=bool(options.get("sync")),
     )
     result = _supplement_recommendation_scan(options, result)
+    _record_recommendation_errors(result.errors)
     enrichments = build_signal_enrichments(
         result.outcomes,
         supply_lookup=fetch_supply,
@@ -643,12 +647,10 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
     target = int(options.get("limit") or len(requested) or 1)
     if not market or len(result.outcomes) >= target or options.get("explicit_symbols"):
         return result
-    multiplier = int(os.getenv("RECOMMENDATION_SCAN_FALLBACK_MULTIPLIER", "3"))
-    max_attempts = max(target + 2, target * multiplier)
-    configured_max_attempts = os.getenv("RECOMMENDATION_SCAN_MAX_ATTEMPTS")
-    if configured_max_attempts:
-        max_attempts = max(target, int(configured_max_attempts))
-    universe_symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=max_attempts, market=market)
+    max_attempts = _recommendation_max_attempts(target)
+    universe_symbols = _filter_recommendation_error_cooldown(
+        symbols_from_universe(Path(_universe_snapshot_path()), limit=max_attempts, market=market)
+    )
     seen = {symbol for symbol in requested}
     seen.update(symbol for symbol, _error in result.errors)
     seen.update(result.scanned)
@@ -672,6 +674,73 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
         )
         merged = _merge_scan_results([merged, supplement_result])
     return merged
+
+
+def _recommendation_initial_symbols(options: dict) -> list[str]:
+    symbols = list(options.get("symbols") or [])
+    market = options.get("market")
+    if not market:
+        return _filter_recommendation_error_cooldown(symbols) or symbols
+    target = int(options.get("limit") or len(symbols) or 1)
+    pool = _filter_recommendation_error_cooldown(
+        symbols_from_universe(Path(_universe_snapshot_path()), limit=_recommendation_max_attempts(target), market=market)
+    )
+    return pool[:target] if pool else symbols
+
+
+def _recommendation_max_attempts(target: int) -> int:
+    multiplier = int(os.getenv("RECOMMENDATION_SCAN_FALLBACK_MULTIPLIER", "3"))
+    max_attempts = max(target + 2, target * multiplier)
+    configured_max_attempts = os.getenv("RECOMMENDATION_SCAN_MAX_ATTEMPTS")
+    if configured_max_attempts:
+        max_attempts = max(target, int(configured_max_attempts))
+    return max_attempts
+
+
+def _filter_recommendation_error_cooldown(symbols: list[str]) -> list[str]:
+    active = _active_recommendation_error_symbols()
+    if not active:
+        return symbols
+    return [symbol for symbol in symbols if symbol not in active]
+
+
+def _active_recommendation_error_symbols() -> set[str]:
+    ttl = int(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", str(6 * 3600)))
+    now = int(time.time())
+    return {
+        symbol
+        for symbol, payload in _read_recommendation_error_state().items()
+        if now - int(payload.get("last_failed_at", 0)) <= ttl
+    }
+
+
+def _record_recommendation_errors(errors: list[tuple[str, str]]) -> None:
+    if not errors:
+        return
+    state = _read_recommendation_error_state()
+    now = int(time.time())
+    for symbol, error in errors:
+        state[symbol] = {"last_failed_at": now, "error": str(error)}
+    _write_recommendation_error_state(state)
+
+
+def _read_recommendation_error_state() -> dict[str, dict]:
+    path = Path(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", "./state/recommendation_symbol_errors.json"))
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {str(symbol): dict(value) for symbol, value in payload.items() if isinstance(value, dict)}
+
+
+def _write_recommendation_error_state(state: dict[str, dict]) -> None:
+    path = Path(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", "./state/recommendation_symbol_errors.json"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _scan_tradingview_symbols_batched(

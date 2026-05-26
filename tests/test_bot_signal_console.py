@@ -629,6 +629,7 @@ def test_render_signal_recommendations_supplements_universe_after_initial_errors
         score_penalty_hint=0,
     )
     monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(tmp_path / "cooldown.json"))
     monkeypatch.setattr(
         bot,
         "parse_tradingview_scan_args",
@@ -661,6 +662,59 @@ def test_render_signal_recommendations_supplements_universe_after_initial_errors
     assert calls == [["AMEX:BMNR"], ["NASDAQ:AAPL", "NYSE:PLTR"]]
     assert "NASDAQ:AAPL" in text
     assert "오류: AMEX:BMNR" in text
+
+
+def test_render_signal_recommendations_cools_down_repeated_error_symbols(monkeypatch, tmp_path):
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(tmp_path / "cooldown.json"))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", "3600")
+    monkeypatch.setattr(
+        bot,
+        "parse_tradingview_scan_args",
+        lambda args: {"symbols": ["AMEX:BMNR"], "market": "US", "limit": 1, "explicit_symbols": False},
+    )
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: ["AMEX:BMNR", "NASDAQ:AAPL"][:limit],
+    )
+    calls = []
+
+    def fake_scan(symbols, batch_size, **kwargs):
+        calls.append(list(symbols))
+        if symbols == ["AMEX:BMNR"]:
+            return (
+                SimpleNamespace(outcomes=[], exclusions=[], errors=[("AMEX:BMNR", "bad symbol")], scanned=[], label_flows={}, table_snapshots={}),
+                1,
+            )
+        return (
+            SimpleNamespace(outcomes=[outcome], exclusions=[], errors=[], scanned=["NASDAQ:AAPL"], label_flows={}, table_snapshots={}),
+            1,
+        )
+
+    monkeypatch.setattr(bot, "_scan_tradingview_symbols_batched", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    first = bot.render_signal_recommendations(["us", "1"])
+    second = bot.render_signal_recommendations(["us", "1"])
+
+    assert calls == [["AMEX:BMNR"], ["NASDAQ:AAPL"], ["NASDAQ:AAPL"]]
+    assert "오류: AMEX:BMNR" in first
+    assert "NASDAQ:AAPL" in second
 
 
 def test_render_signal_recommendations_supplements_when_initial_scan_has_no_candidate(monkeypatch, tmp_path):
@@ -786,7 +840,7 @@ def test_render_signal_recommendations_keeps_supplementing_until_target_candidat
 
     text = bot.render_signal_recommendations(["us", "2"])
 
-    assert calls == [["NASDAQ:MSFT"], ["NASDAQ:AAPL"], ["NYSE:PLTR"], ["NASDAQ:NVDA"]]
+    assert calls == [["NASDAQ:MSFT", "NASDAQ:AAPL"], ["NYSE:PLTR"], ["NASDAQ:NVDA"]]
     assert "NYSE:PLTR" in text
     assert "NASDAQ:NVDA" in text
 
