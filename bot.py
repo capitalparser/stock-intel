@@ -208,7 +208,7 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
 
     lines = ["📡 Lazy Alpha 현재 상태"]
     if result.outcomes:
-        item = sorted(result.outcomes, key=priority_sort_key)[0]
+        item = _latest_tradingview_outcome(result.outcomes)
         penalty = adjusted_priority_penalty(item)
         score = max(0, 100 - penalty)
         status = "매수 후보 유지" if penalty == 0 else f"주의 필요 · 감점 {penalty}"
@@ -244,6 +244,14 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
     if result.errors:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in result.errors[:3]))
     return "\n".join(lines)
+
+
+def _latest_tradingview_outcome(outcomes):
+    return sorted(
+        outcomes,
+        key=lambda row: (row.last_signal_date, row.signal_date, row.symbol),
+        reverse=True,
+    )[0]
 
 
 def _compact_label(text: str) -> str:

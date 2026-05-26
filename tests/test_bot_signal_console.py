@@ -88,6 +88,48 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     assert "확인: 이후 청산/SELL 라벨 없음" in text
 
 
+def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(monkeypatch):
+    old = TradingViewLabelOutcome(
+        symbol="KRX:437730",
+        market="KR",
+        signal_date="2025-12-15",
+        first_signal_date="2025-12-15",
+        last_signal_date="2025-12-15",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=52000,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    latest = TradingViewLabelOutcome(
+        symbol="KRX:437730",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입 @SR↩",
+        entry_price=60000,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={"dist_sma20_pct": 21, "dist_sma50_pct": 15.2},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setattr(
+        bot,
+        "scan_tradingview_symbols",
+        lambda symbols, **kwargs: SimpleNamespace(outcomes=[old, latest], exclusions=[], errors=[], scanned=symbols),
+    )
+
+    text = bot.render_lazy_alpha_status_for_symbol("KRX:437730")
+
+    assert "시그널: 2026-05-26 · 🚀 돌파 진입 @SR↩" in text
+    assert "신호 기준가: 60,000원" in text
+    assert "2025-12-15" not in text
+
+
 def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     exclusion = TradingViewExcludedSignal(
         symbol="KRX:300080",
