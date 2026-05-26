@@ -636,9 +636,13 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
     market = options.get("market")
     requested = list(options.get("symbols") or [])
     target = int(options.get("limit") or len(requested) or 1)
-    if not market or result.outcomes or options.get("explicit_symbols"):
+    if not market or len(result.outcomes) >= target or options.get("explicit_symbols"):
         return result
-    max_attempts = max(target + 2, target * int(os.getenv("RECOMMENDATION_SCAN_FALLBACK_MULTIPLIER", "3")))
+    multiplier = int(os.getenv("RECOMMENDATION_SCAN_FALLBACK_MULTIPLIER", "3"))
+    max_attempts = max(target + 2, target * multiplier)
+    configured_max_attempts = os.getenv("RECOMMENDATION_SCAN_MAX_ATTEMPTS")
+    if configured_max_attempts:
+        max_attempts = max(target, int(configured_max_attempts))
     universe_symbols = symbols_from_universe(Path(_universe_snapshot_path()), limit=max_attempts, market=market)
     seen = {symbol for symbol in requested}
     seen.update(symbol for symbol, _error in result.errors)
@@ -646,11 +650,18 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
     supplements = [symbol for symbol in universe_symbols if symbol not in seen]
     if not supplements:
         return result
-    supplement_result, _batch_count = _scan_tradingview_symbols_batched(
-        supplements[: max(1, max_attempts - len(seen))],
-        batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
-    )
-    return _merge_scan_results([result, supplement_result])
+    remaining_attempts = max(0, max_attempts - len(seen))
+    batch_size = max(1, int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")))
+    merged = result
+    for index in range(0, min(len(supplements), remaining_attempts), batch_size):
+        if len(merged.outcomes) >= target:
+            break
+        chunk = supplements[index : index + batch_size]
+        if not chunk:
+            break
+        supplement_result, _batch_count = _scan_tradingview_symbols_batched(chunk, batch_size=batch_size)
+        merged = _merge_scan_results([merged, supplement_result])
+    return merged
 
 
 def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) -> tuple[TradingViewScanResult, int]:
