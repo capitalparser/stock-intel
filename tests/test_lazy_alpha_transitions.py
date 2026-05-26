@@ -182,6 +182,6 @@ def test_format_transition_report_is_telegram_friendly(tmp_path):
     assert "🔔 Lazy Alpha 상태 전환" in text
     assert "스캔: 1종목 · 전환: 1건" in text
     assert "KRX:437730" in text
-    assert "SETUP → ACTIVE_BUY" in text
+    assert "전환: 셋업 관찰 → 활성 매수" in text
     assert "이전: 2026-05-25 · 🛠️ 셋업 형성 중" in text
     assert "현재: 2026-05-26 · 🚀 돌파 진입" in text

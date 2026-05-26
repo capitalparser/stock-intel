@@ -174,7 +174,7 @@ def format_transition_report(
             [
                 "",
                 f"{index}. {item.symbol}",
-                f"전환: {item.previous_state} → {item.current_state}",
+                f"전환: {_state_display(item.previous_state)} → {_state_display(item.current_state)}",
                 f"이전: {item.previous_label_date} · {item.previous_label}",
                 f"현재: {item.current_label_date} · {item.current_label}",
                 f"판정: {item.verdict}",
@@ -185,6 +185,19 @@ def format_transition_report(
         lines.append("")
         lines.append("오류: " + " · ".join(symbol for symbol, _error in errors[:5]))
     return "\n".join(lines)
+
+
+def _state_display(state_key: str) -> str:
+    labels = {
+        "ACTIVE_BUY": "활성 매수",
+        "BLOCKED_BUY": "매수 차단",
+        "CAUTION_BUY": "추격 주의",
+        "SETUP": "셋업 관찰",
+        "EXIT": "청산/이탈",
+        "OBSERVE": "관찰",
+        "IDLE": "신호 없음",
+    }
+    return labels.get(state_key, state_key)
 
 
 def _state_changed(previous: sqlite3.Row, current: SymbolLazyAlphaState) -> bool:

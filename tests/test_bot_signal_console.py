@@ -373,7 +373,7 @@ def test_render_lazy_alpha_transitions_records_and_reports_changes(monkeypatch, 
     second = bot.render_lazy_alpha_transition_report(["kr"])
 
     assert "새로 알릴 상태 전환이 없습니다." in first
-    assert "전환: SETUP → ACTIVE_BUY" in second
+    assert "전환: 셋업 관찰 → 활성 매수" in second
     assert "현재: 2026-05-26 · 🚀 돌파 진입" in second
 
 
@@ -446,7 +446,7 @@ def test_render_lazy_alpha_transitions_reports_blocked_buy_when_table_conflicts(
     second = bot.render_lazy_alpha_transition_report(["kr"])
 
     assert "새로 알릴 상태 전환이 없습니다." in first
-    assert "전환: SETUP → BLOCKED_BUY" in second
+    assert "전환: 셋업 관찰 → 매수 차단" in second
     assert "판정: 매수 금지" in second
     assert "행동: 추세 회복 전까지 제외" in second
 
