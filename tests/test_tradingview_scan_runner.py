@@ -962,6 +962,73 @@ def test_format_recommendation_report_is_actionable_telegram_card():
     assert "symbol |" not in text
 
 
+def test_format_recommendation_report_summarizes_candidate_states():
+    clear = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    blocked = TradingViewLabelOutcome(
+        symbol="KRX:083650",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=98300,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    us_manual = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_signal_enrichments(
+        [clear, blocked, us_manual],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": 200_000_000, "5d": 1_200_000_000, "20d": 4_800_000_000},
+            "foreigner": {"today": 100_000_000, "5d": 800_000_000, "20d": 2_200_000_000},
+            "daily": [{"institution": 1, "foreigner": 1}] * 5,
+        },
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: (
+            {"current_year": 2026, "current_firm": "삼정KPMG"}
+            if ticker == "083650"
+            else {"current_year": 2026, "current_firm": "한영회계법인"}
+        ),
+    )
+
+    text = format_recommendation_report(
+        recommend_signal_candidates([clear, blocked, us_manual], enrichments=enrichments),
+        scanned=3,
+        errors=[],
+    )
+
+    assert "상태요약: 우선 검토 1건 · 원천확인 대기 1건 · 독립성 차단 1건" in text
+
+
 def test_empty_recommendation_report_explains_errors_and_exclusions():
     exclusion = TradingViewExcludedSignal(
         symbol="NASDAQ:AAPL",

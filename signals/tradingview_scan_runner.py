@@ -520,6 +520,9 @@ def format_recommendation_report(
         "정렬: 추천점수 높은 순",
         "",
     ]
+    state_summary = _recommendation_state_summary(candidates)
+    if state_summary:
+        lines[-1:-1] = [state_summary]
     market_notes = _recommendation_market_notes(candidates)
     if market_notes:
         lines[-1:-1] = market_notes
@@ -581,6 +584,20 @@ def _recommendation_market_notes(candidates: list[RecommendedSignalCandidate]) -
     if "JP" in markets:
         lines.append("시장확인: 일본 후보는 EDINET/유가증권보고서 원천 확인 전 매입 보류")
     return lines
+
+
+def _recommendation_state_summary(candidates: list[RecommendedSignalCandidate]) -> str | None:
+    if not candidates:
+        return None
+    counts = Counter(item.state for item in candidates)
+    order = ["우선 검토", "관찰", "원천확인 대기", "독립성 차단", "추격 금지", "대기"]
+    parts = [f"{state} {counts[state]}건" for state in order if counts.get(state)]
+    parts.extend(
+        f"{state} {count}건"
+        for state, count in counts.items()
+        if state not in set(order)
+    )
+    return "상태요약: " + " · ".join(parts)
 
 
 def _empty_recommendation_diagnostics(
