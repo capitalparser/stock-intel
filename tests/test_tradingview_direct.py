@@ -2,6 +2,7 @@ from signals.tradingview_direct import (
     classify_lazy_alpha_failure,
     classify_pre_signal_risks,
     classify_priority_risks,
+    evaluate_lazy_alpha_state,
     format_tradingview_direct_report,
     is_lazy_alpha_buy_label,
     is_lazy_alpha_exit_label,
@@ -437,6 +438,53 @@ def test_parse_lazy_alpha_tables_extracts_score_and_risk_reward_metrics():
     assert snapshot.buy_eligibility == "🟢 적합 (조건 충족)"
     assert snapshot.eps_growth == ["82.5%", "-18.1%", "-31.0%"]
     assert snapshot.sales_growth == ["13.2%", "6.9%", "5.3%"]
+
+
+def test_evaluate_lazy_alpha_state_blocks_momentum_sell_even_with_old_entry():
+    decision = evaluate_lazy_alpha_state(
+        outcome=None,
+        exclusion_label="📉 모멘텀 SELL\nENTRY: 9000\nTP: 6470\nSL: 10260",
+        table_signal="⚪️ 관망",
+        table_conviction="🔴 D (역배열/꼬임)",
+        table_buy_eligibility="⚠️ 미충족  진입",
+        table_score=0,
+        penalty=0,
+    )
+
+    assert decision.verdict == "매수 금지"
+    assert "모멘텀 SELL" in decision.reason
+    assert "재셋업 전까지 관망" in decision.action
+
+
+def test_evaluate_lazy_alpha_state_marks_conflicting_active_signal_as_chase_risk():
+    decision = evaluate_lazy_alpha_state(
+        outcome_label="🚀 돌파 진입 @SR↩",
+        exclusion_label=None,
+        table_signal="🟢 매수 진입",
+        table_conviction="🟢 A (강한)",
+        table_buy_eligibility="⚠️ 미충족  진입",
+        table_score=65,
+        penalty=3,
+    )
+
+    assert decision.verdict == "추격 주의"
+    assert "매수 자격 미충족" in decision.reason
+    assert "손절선" in decision.action
+
+
+def test_evaluate_lazy_alpha_state_allows_clean_initial_entry():
+    decision = evaluate_lazy_alpha_state(
+        outcome_label="💰 진입",
+        exclusion_label=None,
+        table_signal="🟢 매수 진입",
+        table_conviction="🟢 A (강한)",
+        table_buy_eligibility="🟢 적합 (조건 충족)",
+        table_score=75,
+        penalty=0,
+    )
+
+    assert decision.verdict == "진입 가능"
+    assert "활성 매수 라벨" in decision.reason
 
 
 def test_classify_lazy_alpha_failure_separates_common_failure_modes():

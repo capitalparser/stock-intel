@@ -126,6 +126,7 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     text = bot.render_lazy_alpha_status_for_symbol("KRX:103590")
 
     assert "판정: 매수 후보 유지" in text
+    assert "최종판정: 진입 가능 · 활성 매수 라벨" in text
     assert "기술점수: 100점" in text
     assert "확인: 이후 청산/SELL 라벨 없음" in text
     assert "최근 1개월 라벨 흐름" in text
@@ -241,7 +242,8 @@ def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     text = bot.render_lazy_alpha_status_for_symbol("KRX:300080")
 
     assert "판정: 매수 후보 아님" in text
-    assert "기술점수: 100점" in text
+    assert "최종판정: 매수 금지 · 📉 모멘텀 SELL / ENTRY: 9000 발생" in text
+    assert "기술점수: 100점" not in text
     assert "차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 

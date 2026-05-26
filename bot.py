@@ -56,7 +56,7 @@ from signals.leading_discovery import (
     score_leading_candidate,
 )
 from signals.market import Market
-from signals.tradingview_direct import TradingViewTableSnapshot, interpret_lazy_alpha_flow
+from signals.tradingview_direct import TradingViewTableSnapshot, evaluate_lazy_alpha_state, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
     adjusted_priority_penalty,
@@ -210,14 +210,25 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         return "📡 Lazy Alpha 현재 상태\n판정: 확인 실패\n사유: " + str(exc)
 
     lines = ["📡 Lazy Alpha 현재 상태"]
+    table = getattr(result, "table_snapshots", {}).get(normalize_scan_symbol(symbol))
     if result.outcomes:
         item = _latest_tradingview_outcome(result.outcomes)
         penalty = adjusted_priority_penalty(item)
         score = max(0, 100 - penalty)
         status = "매수 후보 유지" if penalty == 0 else f"주의 필요 · 감점 {penalty}"
+        decision = evaluate_lazy_alpha_state(
+            outcome_label=item.label,
+            table_signal=table.signal if table else None,
+            table_conviction=table.conviction if table else None,
+            table_buy_eligibility=table.buy_eligibility if table else None,
+            table_score=table.aux_score if table else None,
+            penalty=penalty,
+        )
         price_unit = "원" if item.market == "KR" else ""
         lines.extend(
             [
+                f"최종판정: {decision.verdict} · {decision.reason}",
+                f"행동: {decision.action}",
                 f"판정: {status}",
                 f"기술점수: {score}점",
                 f"시그널: {item.signal_date} · {_compact_label(item.label)}",
@@ -232,11 +243,19 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
             reverse=True,
         )[0]
         exit_date = item.exit_date or "차트 우측 최신 라벨"
-        score = max(0, 100 - item.score_penalty_hint)
+        decision = evaluate_lazy_alpha_state(
+            exclusion_label=item.exit_label,
+            table_signal=table.signal if table else None,
+            table_conviction=table.conviction if table else None,
+            table_buy_eligibility=table.buy_eligibility if table else None,
+            table_score=table.aux_score if table else None,
+            penalty=item.score_penalty_hint,
+        )
         lines.extend(
             [
+                f"최종판정: {decision.verdict} · {decision.reason}",
+                f"행동: {decision.action}",
                 "판정: 매수 후보 아님",
-                f"기술점수: {score}점",
                 f"사유: {exit_date} · {_compact_label(item.exit_label)}",
                 f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
             ]
@@ -250,9 +269,7 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         )
     if result.errors:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in result.errors[:3]))
-    table_lines = _format_lazy_alpha_table(
-        getattr(result, "table_snapshots", {}).get(normalize_scan_symbol(symbol))
-    )
+    table_lines = _format_lazy_alpha_table(table)
     if table_lines:
         lines.extend(["", "Lazy 테이블", *table_lines])
     flow_lines = _format_label_flow(

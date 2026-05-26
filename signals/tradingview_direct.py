@@ -80,6 +80,13 @@ class TradingViewTableSnapshot:
     raw_rows: list[str]
 
 
+@dataclass(frozen=True)
+class TradingViewStateDecision:
+    verdict: str
+    reason: str
+    action: str
+
+
 BUY_LABEL_KEYWORDS = (
     "진입",
     "추매",
@@ -447,6 +454,71 @@ def parse_lazy_alpha_tables(payload: dict) -> TradingViewTableSnapshot | None:
         eps_growth=eps_growth,
         sales_growth=sales_growth,
         raw_rows=rows,
+    )
+
+
+def evaluate_lazy_alpha_state(
+    *,
+    outcome_label: str | None = None,
+    exclusion_label: str | None = None,
+    table_signal: str | None = None,
+    table_conviction: str | None = None,
+    table_buy_eligibility: str | None = None,
+    table_score: int | None = None,
+    penalty: int = 0,
+    outcome: TradingViewLabelOutcome | None = None,
+) -> TradingViewStateDecision:
+    label = outcome_label if outcome_label is not None else (outcome.label if outcome else None)
+    if exclusion_label:
+        if "SELL" in exclusion_label or "매도" in exclusion_label:
+            return TradingViewStateDecision(
+                verdict="매수 금지",
+                reason=f"{_compact_flow_label(exclusion_label)} 발생",
+                action="재셋업 전까지 관망",
+            )
+        return TradingViewStateDecision(
+            verdict="청산/관망",
+            reason=f"{_compact_flow_label(exclusion_label)} 발생",
+            action="새 진입 라벨 또는 매수 자격 회복 대기",
+        )
+
+    table_parts = " ".join(
+        part or "" for part in [table_signal, table_conviction, table_buy_eligibility]
+    )
+    if table_score == 0 or "관망" in table_parts or "D " in table_parts or "역배열" in table_parts:
+        return TradingViewStateDecision(
+            verdict="매수 금지",
+            reason="Lazy 테이블 관망/역배열",
+            action="추세 회복 전까지 제외",
+        )
+    if "미충족" in table_parts:
+        return TradingViewStateDecision(
+            verdict="추격 주의",
+            reason="매수 자격 미충족",
+            action="신규 추격보다 손절선과 재확인 라벨 대기",
+        )
+    if penalty >= 10:
+        return TradingViewStateDecision(
+            verdict="추격 주의",
+            reason=f"감점 {penalty}",
+            action="진입보다 눌림/리스크 재확인",
+        )
+    if label and "추매" in label:
+        return TradingViewStateDecision(
+            verdict="진입 유지",
+            reason="추매/보유 단계",
+            action="보유자는 손절선 기준 관리, 신규 진입은 추격 주의",
+        )
+    if label:
+        return TradingViewStateDecision(
+            verdict="진입 가능",
+            reason="활성 매수 라벨",
+            action="분할 진입과 무효화 라벨 확인",
+        )
+    return TradingViewStateDecision(
+        verdict="청산/관망",
+        reason="활성 매수 라벨 없음",
+        action="셋업 형성 또는 진입 라벨 대기",
     )
 
 

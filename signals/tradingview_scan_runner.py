@@ -19,6 +19,7 @@ from signals.tradingview_direct import (
     TradingViewLabelOutcome,
     TradingViewTableSnapshot,
     classify_priority_risks,
+    evaluate_lazy_alpha_state,
     map_lazy_alpha_labels_to_flow,
     map_lazy_alpha_labels_to_exclusions,
     map_lazy_alpha_labels_to_outcomes,
@@ -289,10 +290,21 @@ def format_telegram_outcome_cards(
         score = max(0, 100 - adjusted_penalty)
         status = "매수 후보 유지" if adjusted_penalty == 0 else f"주의 필요 · 감점 {adjusted_penalty}"
         price_unit = "원" if item.market == "KR" else ""
+        table = (table_snapshots or {}).get(item.symbol)
+        decision = evaluate_lazy_alpha_state(
+            outcome_label=item.label,
+            table_signal=table.signal if table else None,
+            table_conviction=table.conviction if table else None,
+            table_buy_eligibility=table.buy_eligibility if table else None,
+            table_score=table.aux_score if table else None,
+            penalty=adjusted_penalty,
+        )
         lines.extend(
             [
                 "",
                 f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)} · 기술점수 {score}점",
+                f"최종판정: {decision.verdict} · {decision.reason}",
+                f"행동: {decision.action}",
                 f"판정: {status}",
                 f"시그널: {item.signal_date} · {item.label} · 중복 {item.duplicate_count}회",
                 f"신호 기준가: {_fmt_price(item.entry_price)}{price_unit}",
@@ -308,7 +320,6 @@ def format_telegram_outcome_cards(
                     f"실적/밸류: {enrichment.fundamental}",
                 ]
             )
-        table = (table_snapshots or {}).get(item.symbol)
         if table:
             lines.extend(format_lazy_alpha_table_card_lines(table))
         if item.failure_class:

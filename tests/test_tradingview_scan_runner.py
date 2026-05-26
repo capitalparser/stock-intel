@@ -101,6 +101,7 @@ def test_format_scan_report_uses_telegram_card_blocks_not_markdown_table():
     assert "symbol | date" not in text
     assert "━━━━━━━━" not in text
     assert "1. NASDAQ:AAPL · 기술점수 100점" in text
+    assert "최종판정: 진입 가능 · 활성 매수 라벨" in text
     assert "시그널: 2026-04-24 · 💰 진입" in text
     assert "신호 기준가: 271" in text
     assert "이후 흐름:" not in text
