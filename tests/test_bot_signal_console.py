@@ -445,6 +445,12 @@ def test_parse_backtest_text_supports_korean_command():
     assert bot.parse_backtest_text("삼성전자") is None
 
 
+def test_parse_recommendation_text_supports_korean_command():
+    assert bot.parse_recommendation_text("/추천 kr 20") == ["kr", "20"]
+    assert bot.parse_recommendation_text("후보 us 30") == ["us", "30"]
+    assert bot.parse_recommendation_text("삼성전자") is None
+
+
 def test_render_backtest_report_uses_saved_buy_events(tmp_path, monkeypatch):
     db_path = tmp_path / "signals.db"
     store = SignalStore(db_path)
@@ -545,6 +551,53 @@ def test_render_leading_discovery_combines_supply_and_technical_scores(monkeypat
     assert "KRX:103590 · 일진전기" in text
     assert "기관 20일 순매수" in text
     assert "수급" in text
+
+
+def test_render_signal_recommendations_uses_scan_results(monkeypatch):
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={"dist_sma20_pct": 4.2, "dist_sma50_pct": 8.5, "stop_distance_pct": 8.0},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setattr(
+        bot,
+        "parse_tradingview_scan_args",
+        lambda args: {"symbols": ["KRX:103590"], "market": "KR"},
+    )
+    monkeypatch.setattr(
+        bot,
+        "_scan_tradingview_symbols_batched",
+        lambda symbols, batch_size: (
+            SimpleNamespace(
+                outcomes=[outcome],
+                exclusions=[],
+                errors=[],
+                scanned=["KRX:103590"],
+                label_flows={},
+                table_snapshots={},
+            ),
+            1,
+        ),
+    )
+    monkeypatch.setattr(
+        bot,
+        "build_kr_signal_enrichments",
+        lambda outcomes, **kwargs: {},
+    )
+
+    text = bot.render_signal_recommendations(["kr", "20"])
+
+    assert "🎯 시세 반영 전 추천 후보" in text
+    assert "KRX:103590" in text
 
 
 def test_strip_korean_slash_command_handles_args_and_bot_suffix():

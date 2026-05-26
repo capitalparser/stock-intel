@@ -54,6 +54,25 @@ class KrSignalEnrichment:
     independence_alert: str
 
 
+@dataclass(frozen=True)
+class RecommendedSignalCandidate:
+    symbol: str
+    market: str
+    signal_date: str
+    label: str
+    recommendation_score: int
+    technical_score: int
+    supply_score: int | None
+    flow_adjustment: int
+    reflection_penalty: int
+    state: str
+    evidence: list[str]
+    risks: list[str]
+    next_action: str
+    outcome: TradingViewLabelOutcome
+    enrichment: KrSignalEnrichment | None = None
+
+
 class TradingViewCli:
     def __init__(self, mcp_dir: Path, *, timeout_seconds: float | None = None) -> None:
         self.mcp_dir = mcp_dir
@@ -383,6 +402,111 @@ def _composite_signal_score(technical_score: int, supply_score: int) -> int:
     return max(0, min(100, round(technical_score * 0.75 + (supply_score / 35) * 25)))
 
 
+def recommend_signal_candidates(
+    outcomes: list[TradingViewLabelOutcome],
+    *,
+    enrichments: dict[str, KrSignalEnrichment] | None = None,
+    label_flows: dict[str, list[TradingViewLabelFlowItem]] | None = None,
+) -> list[RecommendedSignalCandidate]:
+    candidates: list[RecommendedSignalCandidate] = []
+    for outcome in outcomes:
+        enrichment = (enrichments or {}).get(outcome.symbol)
+        interpretation = interpret_lazy_alpha_flow((label_flows or {}).get(outcome.symbol, []))
+        flow_adjustment = interpretation.score_adjustment if interpretation else 0
+        technical_score = max(0, min(100, 100 - adjusted_priority_penalty(outcome) + flow_adjustment))
+        supply_score = enrichment.supply_score.score if enrichment else None
+        reflection_penalty, reflection_risks = _reflection_penalty(outcome)
+        base_score = technical_score * 0.72
+        if supply_score is not None:
+            base_score += (supply_score / 35) * 23
+        else:
+            base_score += 12
+        if interpretation and interpretation.score_adjustment > 0:
+            base_score += min(5, interpretation.score_adjustment)
+        recommendation_score = max(0, min(100, round(base_score - reflection_penalty)))
+        risks = [*reflection_risks, *outcome.risk_flags]
+        evidence = _recommendation_evidence(
+            outcome=outcome,
+            enrichment=enrichment,
+            interpretation=interpretation,
+            technical_score=technical_score,
+        )
+        candidates.append(
+            RecommendedSignalCandidate(
+                symbol=outcome.symbol,
+                market=outcome.market,
+                signal_date=outcome.signal_date,
+                label=outcome.label,
+                recommendation_score=recommendation_score,
+                technical_score=technical_score,
+                supply_score=supply_score,
+                flow_adjustment=flow_adjustment,
+                reflection_penalty=reflection_penalty,
+                state=_recommendation_state(recommendation_score, reflection_penalty, risks),
+                evidence=evidence,
+                risks=risks,
+                next_action=_recommendation_next_action(outcome, risks),
+                outcome=outcome,
+                enrichment=enrichment,
+            )
+        )
+    return sorted(candidates, key=lambda row: (-row.recommendation_score, row.reflection_penalty, row.symbol))
+
+
+def format_recommendation_report(
+    candidates: list[RecommendedSignalCandidate],
+    *,
+    scanned: int,
+    errors: list[tuple[str, str]],
+    ticker_cache: list[dict] | None = None,
+    limit: int = 12,
+) -> str:
+    cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
+    lines = [
+        "🎯 시세 반영 전 추천 후보",
+        "목적: 활성 매수 라벨 중 이미 많이 오른 종목보다 아직 반영 여지가 남은 종목을 우선 압축",
+        f"스캔: {scanned}종목 · 추천 후보: {len(candidates)}건 · 오류: {len(errors)}건",
+        "정렬: 추천점수 높은 순",
+        "",
+    ]
+    if not candidates:
+        lines.extend(
+            [
+                "표시할 추천 후보가 없습니다.",
+                "조건: 활성 매수 라벨 + 낮은 시세반영 페널티 + 수급/흐름 보강",
+            ]
+        )
+    for index, item in enumerate(candidates[:limit], start=1):
+        risks = "없음" if not item.risks else " · ".join(item.risks[:4])
+        supply = "-" if item.supply_score is None else f"{item.supply_score}/35"
+        lines.extend(
+            [
+                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
+                f"추천점수: {item.recommendation_score}점 · 상태: {item.state}",
+                (
+                    f"점수: 기술 {item.technical_score}/100 · 수급 {supply} · "
+                    f"흐름 {item.flow_adjustment:+d} · 시세반영 -{item.reflection_penalty}"
+                ),
+                f"시그널: {item.signal_date} · {item.label}",
+                "근거: " + " · ".join(item.evidence[:4]),
+                f"리스크: {risks}",
+                f"다음 행동: {item.next_action}",
+            ]
+        )
+        if item.enrichment:
+            lines.extend(
+                [
+                    f"독립성알림: {item.enrichment.independence_alert}",
+                    f"감사인: {item.enrichment.auditor}",
+                    f"수급: {item.enrichment.supply}",
+                ]
+            )
+        lines.append("")
+    if errors:
+        lines.append("오류: " + " · ".join(symbol for symbol, _error in errors[:5]))
+    return "\n".join(lines).rstrip()
+
+
 def format_lazy_alpha_table_card_lines(table: TradingViewTableSnapshot) -> list[str]:
     lines: list[str] = []
     if table.aux_score is not None or table.conviction:
@@ -597,3 +721,79 @@ def _fmt_signed_pct(value: float | None) -> str:
     if value is None:
         return "-"
     return f"{value:+g}%"
+
+
+def _reflection_penalty(outcome: TradingViewLabelOutcome) -> tuple[int, list[str]]:
+    penalty = 0
+    risks: list[str] = []
+    returns = outcome.returns
+    return_5d = _num_or_none(returns.get("5d"))
+    return_10d = _num_or_none(returns.get("10d"))
+    return_20d = _num_or_none(returns.get("20d"))
+    if return_5d is not None and return_5d >= 12:
+        penalty += 12
+        risks.append("5일 급등 후 추격 위험")
+    if return_10d is not None and return_10d >= 20:
+        penalty += 12
+        risks.append("10일 시세 반영 과도")
+    if return_20d is not None and return_20d >= 35:
+        penalty += 14
+        risks.append("시세 반영 과도")
+    context = outcome.context
+    dist_sma20 = _num_or_none(context.get("dist_sma20_pct"))
+    dist_sma50 = _num_or_none(context.get("dist_sma50_pct"))
+    stop_distance = _num_or_none(context.get("stop_distance_pct"))
+    if dist_sma20 is not None and dist_sma20 >= 18:
+        penalty += 8
+        risks.append("20일선 과확장")
+    if dist_sma50 is not None and dist_sma50 >= 30:
+        penalty += 8
+        risks.append("50일선 과확장")
+    if stop_distance is not None and stop_distance >= 15:
+        penalty += 6
+        risks.append("손절폭 과대")
+    return min(40, penalty), risks
+
+
+def _recommendation_state(score: int, reflection_penalty: int, risks: list[str]) -> str:
+    if score >= 82 and reflection_penalty <= 10:
+        return "우선 검토"
+    if score >= 70 and reflection_penalty <= 20:
+        return "관찰"
+    if any("시세 반영 과도" in risk for risk in risks):
+        return "추격 금지"
+    return "대기"
+
+
+def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[str]) -> str:
+    if any("시세 반영 과도" in risk or "과확장" in risk for risk in risks):
+        return "눌림 재셋업 또는 신규 Lazy Alpha 라벨 대기"
+    if "피라미딩" in outcome.label:
+        return "기존 보유 관점이면 추매 조건과 손절폭 재확인"
+    return "분할 진입 가능성 검토 및 독립성/손절선 확인"
+
+
+def _recommendation_evidence(
+    *,
+    outcome: TradingViewLabelOutcome,
+    enrichment: KrSignalEnrichment | None,
+    interpretation,
+    technical_score: int,
+) -> list[str]:
+    evidence = [f"활성 매수 라벨", f"기술 {technical_score}점"]
+    if enrichment:
+        evidence.append(f"수급 {enrichment.supply_score.state}")
+    if interpretation:
+        evidence.append(f"라벨흐름 {interpretation.pattern}")
+    if outcome.returns.get("5d") is None:
+        evidence.append("아직 사후 급등 확인 전")
+    return evidence
+
+
+def _num_or_none(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

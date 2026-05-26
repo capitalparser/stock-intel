@@ -80,8 +80,10 @@ from signals.tradingview_scan_runner import (
     adjusted_priority_penalty,
     build_kr_signal_enrichments,
     format_scan_report,
+    format_recommendation_report,
     normalize_scan_symbol,
     priority_sort_key,
+    recommend_signal_candidates,
     scan_tradingview_symbols,
     symbols_from_universe,
 )
@@ -128,6 +130,7 @@ HELP_TEXT = (
     "/신호 — Lazy Alpha 버튼 콘솔\n"
     "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
+    "/추천 kr 50 — 시세 반영 전 우선 검토 후보\n"
     "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
     "/검증 kr 100 — 저장된 BUY 웹훅 시그널 사후검증\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
@@ -147,6 +150,7 @@ _TRADINGVIEW_SCAN_TEXT_SHORTCUTS = {"스캔", "현재신호", "국장스캔", "t
 _LAZY_ALPHA_TRANSITION_TEXT_SHORTCUTS = {"변화", "상태변화", "전환", "알림", "changes", "transition", "transitions"}
 _LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", "discovery"}
 _BACKTEST_TEXT_SHORTCUTS = {"검증", "백테스트", "backtest", "audit"}
+_RECOMMENDATION_TEXT_SHORTCUTS = {"추천", "후보", "추천후보", "recommend", "recommendations", "pick", "picks"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -602,6 +606,31 @@ def render_lazy_alpha_transition_report(args: list[str]) -> str:
     )
 
 
+def render_signal_recommendations(args: list[str]) -> str:
+    scan_args = ["활성만", "점수", "50", "동기화", *args]
+    options = parse_tradingview_scan_args(scan_args)
+    result, _batch_count = _scan_tradingview_symbols_batched(
+        options["symbols"],
+        batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
+    )
+    enrichments = build_kr_signal_enrichments(
+        result.outcomes,
+        supply_lookup=fetch_supply,
+        fundamental_lookup=fetch_fundamental,
+        audit_lookup=fetch_audit_firm,
+    )
+    candidates = recommend_signal_candidates(
+        result.outcomes,
+        enrichments=enrichments,
+        label_flows=result.label_flows,
+    )
+    return format_recommendation_report(
+        candidates,
+        scanned=len(result.scanned),
+        errors=result.errors,
+    )
+
+
 def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) -> tuple[TradingViewScanResult, int]:
     safe_batch_size = max(1, batch_size)
     chunks = [symbols[index : index + safe_batch_size] for index in range(0, len(symbols), safe_batch_size)] or [[]]
@@ -889,6 +918,14 @@ def parse_backtest_text(text: str) -> list[str] | None:
     return None
 
 
+def parse_recommendation_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _RECOMMENDATION_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -1053,6 +1090,22 @@ async def handle_lazy_alpha_transition_command(update: Update, context) -> None:
     await loading.edit_text(_truncate_telegram_text(text))
 
 
+async def handle_recommendation_command(update: Update, context) -> None:
+    """/추천 텍스트 트리거. 활성 Lazy Alpha 매수 라벨 중 시세반영 전 후보를 압축한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    loading = await update.message.reply_text("🎯 추천 후보 스캔 중... 활성 라벨과 시세반영 정도를 함께 봅니다.")
+    try:
+        text = await asyncio.to_thread(render_signal_recommendations, args or ["kr"])
+    except Exception as exc:
+        logger.exception("signal recommendation scan failed")
+        await loading.edit_text(f"⚠️ 추천 후보 스캔 실패: {exc!s}")
+        return
+    await loading.edit_text(_truncate_telegram_text(text))
+
+
 async def handle_leading_discovery_command(update: Update, context) -> None:
     """/선행 텍스트 트리거. 수급+기술 전조로 국장 선행 후보를 압축한다."""
     if not await check_allowed(update):
@@ -1208,6 +1261,17 @@ async def handle_text(update: Update, context) -> None:
             return
         await loading.edit_text(_truncate_telegram_text(text))
         return
+    recommendation_args = parse_recommendation_text(query)
+    if recommendation_args is not None:
+        loading = await update.message.reply_text("🎯 추천 후보 스캔 중... 활성 라벨과 시세반영 정도를 함께 봅니다.")
+        try:
+            text = await asyncio.to_thread(render_signal_recommendations, recommendation_args or ["kr"])
+        except Exception as exc:
+            logger.exception("signal recommendation scan failed")
+            await loading.edit_text(f"⚠️ 추천 후보 스캔 실패: {exc!s}")
+            return
+        await loading.edit_text(_truncate_telegram_text(text))
+        return
     leading_args = parse_leading_discovery_text(query)
     if leading_args is not None:
         loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
@@ -1297,6 +1361,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler("signal", handle_signal_detail))
     tg_app.add_handler(CommandHandler(["leading", "discover"], handle_leading_discovery_command))
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
+    tg_app.add_handler(CommandHandler(["recommend", "recommendations", "pick", "picks"], handle_recommendation_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["changes", "transition", "transitions"], handle_lazy_alpha_transition_command))
     tg_app.add_handler(CommandHandler(["backtest", "audit"], handle_backtest_command))
@@ -1323,6 +1388,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:변화|상태변화|전환|알림)(?:@\S+)?(?:\s+.*)?$"),
             handle_lazy_alpha_transition_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:추천|후보|추천후보)(?:@\S+)?(?:\s+.*)?$"),
+            handle_recommendation_command,
         )
     )
     tg_app.add_handler(

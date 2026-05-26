@@ -5,12 +5,14 @@ from pathlib import Path
 from signals.tradingview_scan_runner import (
     TradingViewCli,
     build_kr_signal_enrichments,
+    format_recommendation_report,
     format_telegram_exclusion_cards,
     format_scan_report,
     format_telegram_outcome_cards,
     market_for_symbol,
     normalize_scan_symbol,
     priority_sort_key,
+    recommend_signal_candidates,
     symbol_display_name,
     symbols_from_universe,
 )
@@ -694,3 +696,98 @@ def test_kr_enrichment_marks_distribution_supply_risk_for_scan_cards():
 
     assert "수급점수: 0/35 · 수급 약함" in text
     assert "수급리스크: 기관+외국인 20일 동반 순매도" in text
+
+
+def test_recommend_signal_candidates_prioritizes_fresh_unreflected_entries():
+    fresh = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={"dist_sma20_pct": 4.2, "dist_sma50_pct": 8.5, "stop_distance_pct": 8.0},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    reflected = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=9050,
+        returns={"5d": 18.5, "10d": 31.2, "20d": 55.0},
+        context={"dist_sma20_pct": 22.0, "dist_sma50_pct": 38.0, "stop_distance_pct": 18.0},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_kr_signal_enrichments(
+        [fresh, reflected],
+        supply_lookup=lambda ticker: {
+            "103590": {
+                "institution": {"today": 200_000_000, "5d": 1_200_000_000, "20d": 4_800_000_000},
+                "foreigner": {"today": 100_000_000, "5d": 800_000_000, "20d": 2_200_000_000},
+                "daily": [{"institution": 1, "foreigner": 1}] * 5,
+            },
+            "300080": {
+                "institution": {"today": -100_000_000, "5d": -800_000_000, "20d": -2_400_000_000},
+                "foreigner": {"today": -200_000_000, "5d": -700_000_000, "20d": -1_900_000_000},
+                "daily": [],
+            },
+        }[ticker],
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    recommendations = recommend_signal_candidates(
+        [reflected, fresh],
+        enrichments=enrichments,
+        label_flows={
+            "KRX:103590": [
+                TradingViewLabelFlowItem("2026-05-25", "🛠️ 셋업 형성 중", 1),
+                TradingViewLabelFlowItem("2026-05-26", "🚀 돌파 진입", 2),
+            ]
+        },
+    )
+
+    assert recommendations[0].symbol == "KRX:103590"
+    assert recommendations[0].state == "우선 검토"
+    assert recommendations[0].reflection_penalty == 0
+    assert "시세 반영 과도" in " · ".join(recommendations[1].risks)
+
+
+def test_format_recommendation_report_is_actionable_telegram_card():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="🚀 돌파 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={"dist_sma20_pct": 4.2, "dist_sma50_pct": 8.5, "stop_distance_pct": 8.0},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_recommendation_report(
+        recommend_signal_candidates([outcome]),
+        scanned=12,
+        errors=[],
+        ticker_cache=[{"code": "103590", "name": "일진전기", "market": "KOSPI"}],
+    )
+
+    assert "🎯 시세 반영 전 추천 후보" in text
+    assert "목적: 활성 매수 라벨 중 이미 많이 오른 종목보다" in text
+    assert "1. KRX:103590 · 일진전기" in text
+    assert "추천점수:" in text
+    assert "다음 행동:" in text
+    assert "symbol |" not in text
