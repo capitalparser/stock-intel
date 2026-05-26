@@ -104,7 +104,7 @@ def map_lazy_alpha_labels_to_outcomes(
 ) -> list[TradingViewLabelOutcome]:
     if not bars:
         return []
-    offset = max(0, (total_available or len(bars)) - len(bars))
+    shift = _label_bar_shift(bars, labels)
     candidates: list[tuple[int, dict]] = []
     exit_bar_indexes: list[int] = []
     for label in labels:
@@ -112,7 +112,7 @@ def map_lazy_alpha_labels_to_outcomes(
         x_value = label.get("x")
         if not isinstance(x_value, int):
             continue
-        bar_index = x_value - offset
+        bar_index = x_value + shift
         if bar_index < 0:
             continue
         if is_lazy_alpha_exit_label(text):
@@ -174,7 +174,7 @@ def map_lazy_alpha_labels_to_exclusions(
 ) -> list[TradingViewExcludedSignal]:
     if not bars:
         return []
-    offset = max(0, (total_available or len(bars)) - len(bars))
+    shift = _label_bar_shift(bars, labels)
     candidates: list[tuple[int, dict]] = []
     exits: list[tuple[int, dict]] = []
     for label in labels:
@@ -182,7 +182,7 @@ def map_lazy_alpha_labels_to_exclusions(
         x_value = label.get("x")
         if not isinstance(x_value, int):
             continue
-        bar_index = x_value - offset
+        bar_index = x_value + shift
         if bar_index < 0:
             continue
         if is_lazy_alpha_exit_label(text):
@@ -228,6 +228,17 @@ def map_lazy_alpha_labels_to_exclusions(
 
 def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:
     return any(exit_bar_index > last_entry_bar_index for exit_bar_index in exit_bar_indexes)
+
+
+def _label_bar_shift(bars: list[dict], labels: list[dict]) -> int:
+    x_values = [label.get("x") for label in labels if isinstance(label.get("x"), int)]
+    if not x_values:
+        return 0
+    max_x = max(x_values)
+    right_edge_gap = (len(bars) - 1) - max_x
+    if right_edge_gap > 50:
+        return right_edge_gap
+    return 0
 
 
 def _cluster_candidates(

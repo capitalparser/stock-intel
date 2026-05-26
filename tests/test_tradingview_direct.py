@@ -225,6 +225,46 @@ def test_map_lazy_alpha_labels_keeps_latest_entry_after_prior_exit_label():
     assert outcomes[0].entry_price == 160
 
 
+def test_map_lazy_alpha_labels_right_aligns_visible_range_label_coordinates():
+    bars = [
+        {"time": 1_700_000_000 + i * 86_400, "open": 100 + i, "high": 102 + i, "low": 98 + i, "close": 100 + i}
+        for i in range(300)
+    ]
+    labels = [
+        {"text": "🚀 돌파 진입", "x": 156, "price": None},
+        {"text": "🔪 1차 분할청산", "x": 157, "price": None},
+        {"text": "🔼 피라미딩 추매 1 (50%)", "x": 159, "price": None},
+    ]
+
+    outcomes = map_lazy_alpha_labels_to_outcomes(
+        symbol="KRX:321370",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=300,
+        duplicate_window_bars=1,
+        entry_policy="last",
+        horizons=(5,),
+        active_only=True,
+    )
+    exclusions = map_lazy_alpha_labels_to_exclusions(
+        symbol="KRX:321370",
+        market="KR",
+        bars=bars,
+        labels=labels,
+        total_available=300,
+        duplicate_window_bars=1,
+        entry_policy="last",
+    )
+
+    assert len(outcomes) == 1
+    assert outcomes[0].label == "🔼 피라미딩 추매 1 (50%)"
+    assert outcomes[0].entry_price == 399
+    assert len(exclusions) == 1
+    assert exclusions[0].label == "🚀 돌파 진입"
+    assert exclusions[0].exit_label == "🔪 1차 분할청산"
+
+
 def test_classify_lazy_alpha_failure_separates_common_failure_modes():
     assert (
         classify_lazy_alpha_failure(
