@@ -520,6 +520,9 @@ def format_recommendation_report(
         "정렬: 추천점수 높은 순",
         "",
     ]
+    market_notes = _recommendation_market_notes(candidates)
+    if market_notes:
+        lines[-1:-1] = market_notes
     if cooldown_skips:
         lines.append("쿨다운 제외: " + " · ".join(cooldown_skips[:8]))
         lines.append("")
@@ -568,6 +571,16 @@ def format_recommendation_report(
     if errors and candidates:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in errors[:5]))
     return "\n".join(lines).rstrip()
+
+
+def _recommendation_market_notes(candidates: list[RecommendedSignalCandidate]) -> list[str]:
+    markets = {item.market for item in candidates}
+    lines: list[str] = []
+    if "US" in markets:
+        lines.append("시장확인: 미국 후보는 EDGAR/10-K 원천 확인 전 매입 보류")
+    if "JP" in markets:
+        lines.append("시장확인: 일본 후보는 EDINET/유가증권보고서 원천 확인 전 매입 보류")
+    return lines
 
 
 def _empty_recommendation_diagnostics(

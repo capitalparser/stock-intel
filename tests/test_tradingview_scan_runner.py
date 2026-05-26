@@ -1091,6 +1091,10 @@ def test_us_recommendation_report_includes_manual_independence_context():
     )
 
     assert "NASDAQ:AAPL" in text
+    assert "시장확인: 미국 후보는 EDGAR/10-K 원천 확인 전 매입 보류" in text
+    assert "추천점수:" in text
+    assert "상태: 원천확인 대기" in text
+    assert "다음 행동: 독립성 원천 확인 전 매입 보류" in text
     assert "독립성알림: 🟡 독립성 확인 필요 — 원천 확인 전 매입 보류" in text
     assert "감사인: 수동 확인 필요 · 미국 종목 감사인 자동 확인 미지원. EDGAR/10-K 등 원천 확인 필요." in text
     assert "수급: 시장: 미국 · 거래소 NASDAQ · 수급 자동 미지원" in text
@@ -1127,6 +1131,9 @@ def test_jp_recommendation_report_includes_edinet_manual_context():
     )
 
     assert "TSE:7203" in text
+    assert "시장확인: 일본 후보는 EDINET/유가증권보고서 원천 확인 전 매입 보류" in text
+    assert "상태: 원천확인 대기" in text
+    assert "다음 행동: 독립성 원천 확인 전 매입 보류" in text
     assert "수급: 시장: 일본 · 거래소 TSE · 수급 자동 미지원" in text
     assert "프로필: 원천: EDINET/유가증권보고서 · 감사인/사업/리스크 수동 확인 필요" in text
     assert "감사인: 수동 확인 필요 · 일본 종목 감사인 자동 확인 미지원. EDINET/유가증권보고서 등 원천 확인 필요." in text
