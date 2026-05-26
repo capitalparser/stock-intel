@@ -82,6 +82,7 @@ from signals.tradingview_scan_runner import (
     build_signal_enrichments,
     format_scan_report,
     format_recommendation_report,
+    lazy_table_caution,
     normalize_scan_symbol,
     priority_sort_key,
     recommend_signal_candidates,
@@ -258,15 +259,17 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
     if result.outcomes:
         item = _latest_tradingview_outcome(result.outcomes)
         penalty = adjusted_priority_penalty(item)
-        score = max(0, 100 - penalty)
-        status = "매수 후보 유지" if penalty == 0 else f"주의 필요 · 감점 {penalty}"
+        table_penalty, table_risks = lazy_table_caution(table)
+        total_penalty = penalty + table_penalty
+        score = max(0, 100 - total_penalty)
+        status = "매수 후보 유지" if total_penalty == 0 else f"주의 필요 · 감점 {total_penalty}"
         decision = evaluate_lazy_alpha_state(
             outcome_label=item.label,
             table_signal=table.signal if table else None,
             table_conviction=table.conviction if table else None,
             table_buy_eligibility=table.buy_eligibility if table else None,
             table_score=table.aux_score if table else None,
-            penalty=penalty,
+            penalty=total_penalty,
         )
         price_unit = "원" if item.market == "KR" else ""
         score_parts = [f"기술 {score}점"]
@@ -291,6 +294,8 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
                 "확인: 이후 청산/SELL 라벨 없음",
             ]
         )
+        if table_risks:
+            lines.append("상태 경고: " + " · ".join(table_risks))
     elif result.exclusions:
         item = sorted(
             result.exclusions,
@@ -636,6 +641,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         result.outcomes,
         enrichments=enrichments,
         label_flows=result.label_flows,
+        table_snapshots=result.table_snapshots,
     )
     return format_recommendation_report(
         candidates,

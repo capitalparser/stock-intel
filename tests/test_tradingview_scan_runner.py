@@ -763,6 +763,57 @@ def test_recommend_signal_candidates_prioritizes_fresh_unreflected_entries():
     assert "시세 반영 과도" in " · ".join(recommendations[1].risks)
 
 
+def test_recommend_signal_candidates_penalizes_bearish_lazy_table():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-21",
+        first_signal_date="2026-05-21",
+        last_signal_date="2026-05-21",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=10860,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    snapshot = TradingViewTableSnapshot(
+        signal="⚪️ 관망",
+        conviction="🔴 D (역배열/꼬임)",
+        smart_eval="떨어지는 칼날 (접근 금지)",
+        ema_alignment="🔴 약배열 (유지)",
+        aux_score=1,
+        aux_signal="대기",
+        market_sector=None,
+        trend_energy=None,
+        market_control="🐻 매도세 (우위)",
+        rs_score=17,
+        volume_strength=1.33,
+        high_52w_pct=-55.1,
+        stop_loss=None,
+        stop_loss_pct=None,
+        target_price=None,
+        target_return_pct=None,
+        risk_reward=None,
+        buy_eligibility="⚠️ 미충족  진입",
+        fundamental=None,
+        eps_growth=[],
+        sales_growth=[],
+        raw_rows=[],
+    )
+
+    recommendations = recommend_signal_candidates(
+        [outcome],
+        table_snapshots={"KRX:300080": snapshot},
+    )
+
+    assert recommendations[0].technical_score == 65
+    assert recommendations[0].recommendation_score < 70
+    assert "Lazy 테이블 관망/역배열/매도세" in recommendations[0].risks
+    assert "진입 보류" in recommendations[0].next_action
+
+
 def test_format_recommendation_report_is_actionable_telegram_card():
     outcome = TradingViewLabelOutcome(
         symbol="KRX:103590",

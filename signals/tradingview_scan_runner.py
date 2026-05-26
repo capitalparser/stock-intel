@@ -313,27 +313,29 @@ def format_telegram_outcome_cards(
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
     ordered_outcomes = sorted(
         outcomes,
-        key=lambda row: _card_sort_key(row, enrichments or {}, label_flows or {}),
+        key=lambda row: _card_sort_key(row, enrichments or {}, label_flows or {}, table_snapshots or {}),
     )
     lines = [f"활성 매수 후보: {len(ordered_outcomes)}건"]
     for index, item in enumerate(ordered_outcomes, start=1):
         priority_risks = classify_priority_risks(returns=item.returns, context=item.context)
-        combined_risks = [*item.risk_flags, *priority_risks]
-        risk = "없음" if not combined_risks else ", ".join(combined_risks)
         adjusted_penalty = adjusted_priority_penalty(item)
         interpretation = interpret_lazy_alpha_flow((label_flows or {}).get(item.symbol, []))
         flow_adjustment = interpretation.score_adjustment if interpretation else 0
-        score = max(0, min(100, 100 - adjusted_penalty + flow_adjustment))
-        status = "매수 후보 유지" if adjusted_penalty == 0 else f"주의 필요 · 감점 {adjusted_penalty}"
         price_unit = "원" if item.market == "KR" else ""
         table = (table_snapshots or {}).get(item.symbol)
+        table_penalty, table_risks = lazy_table_caution(table)
+        combined_risks = [*item.risk_flags, *priority_risks, *table_risks]
+        risk = "없음" if not combined_risks else ", ".join(combined_risks)
+        score = max(0, min(100, 100 - adjusted_penalty + flow_adjustment - table_penalty))
+        total_penalty = adjusted_penalty + table_penalty
+        status = "매수 후보 유지" if total_penalty == 0 else f"주의 필요 · 감점 {total_penalty}"
         decision = evaluate_lazy_alpha_state(
             outcome_label=item.label,
             table_signal=table.signal if table else None,
             table_conviction=table.conviction if table else None,
             table_buy_eligibility=table.buy_eligibility if table else None,
             table_score=table.aux_score if table else None,
-            penalty=adjusted_penalty,
+            penalty=total_penalty,
         )
         enrichment = (enrichments or {}).get(item.symbol)
         score_label = f"기술점수 {score}점"
@@ -389,10 +391,12 @@ def _card_sort_key(
     item: TradingViewLabelOutcome,
     enrichments: dict[str, KrSignalEnrichment],
     label_flows: dict[str, list[TradingViewLabelFlowItem]],
+    table_snapshots: dict[str, TradingViewTableSnapshot | None],
 ) -> tuple[int, int, str]:
     interpretation = interpret_lazy_alpha_flow(label_flows.get(item.symbol, []))
     flow_adjustment = interpretation.score_adjustment if interpretation else 0
-    technical_score = max(0, min(100, 100 - adjusted_priority_penalty(item) + flow_adjustment))
+    table_penalty, _table_risks = lazy_table_caution(table_snapshots.get(item.symbol))
+    technical_score = max(0, min(100, 100 - adjusted_priority_penalty(item) + flow_adjustment - table_penalty))
     enrichment = enrichments.get(item.symbol)
     if enrichment and enrichment.supply_score is not None:
         return (-_composite_signal_score(technical_score, enrichment.supply_score.score), adjusted_priority_penalty(item), item.symbol)
@@ -403,18 +407,58 @@ def _composite_signal_score(technical_score: int, supply_score: int) -> int:
     return max(0, min(100, round(technical_score * 0.75 + (supply_score / 35) * 25)))
 
 
+def lazy_table_caution(table: TradingViewTableSnapshot | None) -> tuple[int, list[str]]:
+    if table is None:
+        return 0, []
+    text = " ".join(
+        part or ""
+        for part in [
+            table.signal,
+            table.conviction,
+            table.smart_eval,
+            table.ema_alignment,
+            table.market_control,
+            table.buy_eligibility,
+        ]
+    )
+    penalty = 0
+    risks: list[str] = []
+    if any(keyword in text for keyword in ["관망", "역배열", "매도세", "하락 추세", "떨어지는 칼날"]):
+        penalty = max(penalty, 35)
+        risks.append("Lazy 테이블 관망/역배열/매도세")
+    elif "약배열" in text:
+        penalty = max(penalty, 20)
+        risks.append("Lazy 테이블 약배열")
+    if table.aux_score is not None:
+        if table.aux_score <= 20:
+            penalty = max(penalty, 35)
+            risks.append(f"Lazy 원점수 {table.aux_score}점")
+        elif table.aux_score <= 40:
+            penalty = max(penalty, 25)
+            risks.append(f"Lazy 원점수 {table.aux_score}점")
+        elif table.aux_score <= 60:
+            penalty = max(penalty, 10)
+            risks.append(f"Lazy 원점수 {table.aux_score}점")
+    if "미충족" in text:
+        penalty = max(penalty, 20)
+        risks.append("Lazy 매수 자격 미충족")
+    return penalty, list(dict.fromkeys(risks))
+
+
 def recommend_signal_candidates(
     outcomes: list[TradingViewLabelOutcome],
     *,
     enrichments: dict[str, KrSignalEnrichment] | None = None,
     label_flows: dict[str, list[TradingViewLabelFlowItem]] | None = None,
+    table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
 ) -> list[RecommendedSignalCandidate]:
     candidates: list[RecommendedSignalCandidate] = []
     for outcome in outcomes:
         enrichment = (enrichments or {}).get(outcome.symbol)
         interpretation = interpret_lazy_alpha_flow((label_flows or {}).get(outcome.symbol, []))
         flow_adjustment = interpretation.score_adjustment if interpretation else 0
-        technical_score = max(0, min(100, 100 - adjusted_priority_penalty(outcome) + flow_adjustment))
+        table_penalty, table_risks = lazy_table_caution((table_snapshots or {}).get(outcome.symbol))
+        technical_score = max(0, min(100, 100 - adjusted_priority_penalty(outcome) + flow_adjustment - table_penalty))
         supply_score = enrichment.supply_score.score if enrichment and enrichment.supply_score is not None else None
         reflection_penalty, reflection_risks = _reflection_penalty(outcome)
         base_score = technical_score * 0.72
@@ -425,7 +469,7 @@ def recommend_signal_candidates(
         if interpretation and interpretation.score_adjustment > 0:
             base_score += min(5, interpretation.score_adjustment)
         recommendation_score = max(0, min(100, round(base_score - reflection_penalty)))
-        risks = [*reflection_risks, *outcome.risk_flags]
+        risks = [*reflection_risks, *outcome.risk_flags, *table_risks]
         evidence = _recommendation_evidence(
             outcome=outcome,
             enrichment=enrichment,
@@ -868,6 +912,8 @@ def _recommendation_state(score: int, reflection_penalty: int, risks: list[str])
 
 
 def _recommendation_next_action(outcome: TradingViewLabelOutcome, risks: list[str]) -> str:
+    if any("Lazy 테이블" in risk or "매수 자격 미충족" in risk for risk in risks):
+        return "신규 진입 보류, Lazy 테이블 회복 또는 재셋업 라벨 대기"
     if any("시세 반영 과도" in risk or "과확장" in risk for risk in risks):
         return "눌림 재셋업 또는 신규 Lazy Alpha 라벨 대기"
     if "피라미딩" in outcome.label:

@@ -186,6 +186,66 @@ def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(
 
     assert "시그널: 2026-05-26 · 🚀 돌파 진입 @SR↩" in text
     assert "신호 기준가: 60,000원" in text
+
+
+def test_render_lazy_alpha_status_warns_when_table_conflicts_with_active_label(monkeypatch):
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-21",
+        first_signal_date="2026-05-21",
+        last_signal_date="2026-05-21",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=10860,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setattr(
+        bot,
+        "scan_tradingview_symbols",
+        lambda symbols, **kwargs: SimpleNamespace(
+            outcomes=[outcome],
+            exclusions=[],
+            errors=[],
+            scanned=symbols,
+            label_flows={},
+            table_snapshots={
+                "KRX:300080": TradingViewTableSnapshot(
+                    signal="⚪️ 관망",
+                    conviction="🔴 D (역배열/꼬임)",
+                    smart_eval="떨어지는 칼날 (접근 금지)",
+                    ema_alignment="🔴 약배열 (유지)",
+                    aux_score=1,
+                    aux_signal="대기",
+                    market_sector=None,
+                    trend_energy=None,
+                    market_control="🐻 매도세 (우위)",
+                    rs_score=17,
+                    volume_strength=1.33,
+                    high_52w_pct=-55.1,
+                    stop_loss=None,
+                    stop_loss_pct=None,
+                    target_price=None,
+                    target_return_pct=None,
+                    risk_reward=None,
+                    buy_eligibility="⚠️ 미충족  진입",
+                    fundamental=None,
+                    eps_growth=[],
+                    sales_growth=[],
+                    raw_rows=[],
+                )
+            },
+        ),
+    )
+
+    text = bot.render_lazy_alpha_status_for_symbol("KRX:300080")
+
+    assert "최종판정: 매수 금지 · Lazy 테이블 관망/역배열" in text
+    assert "상태 경고: Lazy 테이블 관망/역배열/매도세" in text
+    assert "기술점수: 65점" in text
     assert "2025-12-15" not in text
 
 
