@@ -506,6 +506,27 @@ def test_render_recommendation_cooldown_clear_resets_state(monkeypatch, tmp_path
     assert json.loads(path.read_text(encoding="utf-8")) == {}
 
 
+def test_render_recommendation_cooldown_clears_single_symbol(monkeypatch, tmp_path):
+    path = tmp_path / "cooldown.json"
+    path.write_text(
+        json.dumps(
+            {
+                "AMEX:BMNR": {"last_failed_at": 1_000, "error": "bad"},
+                "NASDAQ:MSFT": {"last_failed_at": 1_000, "error": "temporary"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(path))
+
+    text = bot.render_recommendation_cooldown(["해제", "AMEX:BMNR"])
+
+    state = json.loads(path.read_text(encoding="utf-8"))
+    assert "AMEX:BMNR 해제 완료" in text
+    assert "AMEX:BMNR" not in state
+    assert "NASDAQ:MSFT" in state
+
+
 def test_render_backtest_report_uses_saved_buy_events(tmp_path, monkeypatch):
     db_path = tmp_path / "signals.db"
     store = SignalStore(db_path)

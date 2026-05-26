@@ -646,7 +646,18 @@ def render_signal_recommendations(args: list[str]) -> str:
 
 
 def render_recommendation_cooldown(args: list[str]) -> str:
-    if any(arg.strip().lower() in {"초기화", "해제", "삭제", "clear", "reset"} for arg in args):
+    normalized_args = [arg.strip() for arg in args if arg.strip()]
+    lowered_args = [arg.lower() for arg in normalized_args]
+    if any(arg in {"해제", "삭제", "remove", "delete"} for arg in lowered_args) and len(normalized_args) >= 2:
+        symbol = normalize_scan_symbol(normalized_args[-1])
+        state = _read_recommendation_error_state()
+        if symbol in state:
+            del state[symbol]
+            _write_recommendation_error_state(state)
+            return f"🧊 추천 오류 심볼 쿨다운\n{symbol} 해제 완료"
+        return f"🧊 추천 오류 심볼 쿨다운\n{symbol}은 현재 쿨다운 상태가 아닙니다."
+
+    if any(arg in {"초기화", "clear", "reset"} for arg in lowered_args):
         _write_recommendation_error_state({})
         return "🧊 추천 오류 심볼 쿨다운\n초기화 완료"
 
