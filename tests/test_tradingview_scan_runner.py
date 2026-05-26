@@ -261,6 +261,38 @@ def test_format_scan_report_includes_exclusion_reason_cards():
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 
 
+def test_format_scan_report_includes_auditor_alert_for_kr_exclusions():
+    exclusion = TradingViewExcludedSignal(
+        symbol="KRX:083650",
+        market="KR",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date="2026-05-26",
+        exit_label="💸 최종 청산",
+        entry_bar_index=297,
+        exit_bar_index=409,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_kr_signal_enrichments(
+        [exclusion],
+        supply_lookup=lambda ticker: {},
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "삼정회계법인"},
+    )
+
+    text = format_scan_report(
+        outcomes=[],
+        exclusions=[exclusion],
+        errors=[],
+        scanned=["KRX:083650"],
+        enrichments=enrichments,
+    )
+
+    assert "독립성알림: 🚫 독립성 차단 — 매입 검토 금지" in text
+    assert "감사인: 독립성 차단 · 삼정회계법인" in text
+
+
 def test_format_scan_report_shows_only_current_exclusion_per_inactive_symbol():
     active = TradingViewLabelOutcome(
         symbol="KRX:321370",
@@ -555,10 +587,41 @@ def test_kr_enrichment_adds_supply_fundamental_and_auditor_to_cards():
     )
 
     assert "감사인: 현재연도 감사인 확인 필요 · 삼정회계법인" in text
+    assert "독립성알림: 🟡 독립성 확인 필요 — 원천 확인 전 매입 보류" in text
     assert "2026 감사인 직접 확인 없음" in text
+    assert text.index("독립성알림:") < text.index("감사인:")
     assert text.index("감사인:") < text.index("수급:")
     assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
     assert "실적/밸류: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text
+
+
+def test_kr_enrichment_escalates_blocked_auditor_before_scores():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:083650",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=98300,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    enrichments = build_kr_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {},
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {"current_year": 2026, "current_firm": "삼정KPMG"},
+    )
+
+    text = "\n".join(format_telegram_outcome_cards([outcome], enrichments=enrichments))
+
+    assert "독립성알림: 🚫 독립성 차단 — 매입 검토 금지" in text
+    assert "감사인: 독립성 차단 · 삼정회계법인" in text
 
 
 def test_kr_enrichment_scores_supply_accumulation_for_scan_cards():

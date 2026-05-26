@@ -48,7 +48,7 @@ from signals.console import (
     parse_console_args,
     parse_console_callback,
 )
-from signals.independence import decide_independence
+from signals.independence import format_independence_alert, decide_independence
 from signals.kr_watch_candidates import KR_CANDIDATE_SEEDS
 from signals.lazy_alpha_transitions import (
     LazyAlphaTransitionStore,
@@ -204,6 +204,9 @@ def render_stock_lookup_report(
         fundamental,
         audit,
     )
+    if ticker.isdigit() and len(ticker) == 6:
+        decision = decide_independence(Market("KR", "한국"), audit)
+        text = format_independence_alert(decision) + "\n" + text
     enabled = include_lazy_alpha
     if enabled is None:
         enabled = os.getenv("STOCK_LOOKUP_LAZY_ALPHA", "1") not in {"0", "false", "False"}
@@ -551,7 +554,7 @@ def render_tradingview_scan(args: list[str]) -> str:
     if options["sort"] == "SCORE":
         outcomes = sorted(outcomes, key=priority_sort_key)
     enrichments = build_kr_signal_enrichments(
-        outcomes,
+        [*outcomes, *result.exclusions],
         supply_lookup=fetch_supply,
         fundamental_lookup=fetch_fundamental,
         audit_lookup=fetch_audit_firm,

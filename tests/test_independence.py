@@ -1,4 +1,5 @@
 from signals.independence import decide_independence
+from signals.independence import format_independence_alert
 from signals.market import Market
 
 
@@ -68,6 +69,24 @@ def test_prior_one_year_auditor_returns_manual_verify_current_year():
 
     assert decision.status == "MANUAL_VERIFY_CURRENT_YEAR"
     assert "2026 감사인 직접 확인 없음" in decision.reason
+
+
+def test_format_independence_alert_escalates_blocked_and_manual_verify_statuses():
+    blocked = decide_independence(
+        Market("KR", "한국"),
+        {"current_year": 2026, "current_firm": "삼정회계법인"},
+        as_of_year=2026,
+    )
+    manual = decide_independence(
+        Market("KR", "한국"),
+        {"current_year": 2025, "current_firm": "한영회계법인", "recent": [{"year": 2025, "firm": "한영회계법인"}]},
+        as_of_year=2026,
+    )
+
+    assert format_independence_alert(blocked).startswith("🚫 독립성 차단")
+    assert "매입 검토 금지" in format_independence_alert(blocked)
+    assert format_independence_alert(manual).startswith("🟡 독립성 확인 필요")
+    assert "원천 확인 전 매입 보류" in format_independence_alert(manual)
 
 
 def test_us_returns_manual_verify_with_edgar_wording():

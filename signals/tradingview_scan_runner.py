@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from signals.independence import decide_independence
+from signals.independence import format_independence_alert, decide_independence
 from signals.leading_discovery import SupplyScore, score_supply_accumulation
 from signals.market import Market, ticker_for_lookup
 from signals.tradingview_direct import (
@@ -51,6 +51,7 @@ class KrSignalEnrichment:
     supply_score: SupplyScore
     fundamental: str
     auditor: str
+    independence_alert: str
 
 
 class TradingViewCli:
@@ -234,7 +235,7 @@ def format_scan_report(
     )
     if include_exclusions and current_exclusions:
         lines.append("")
-        lines.extend(format_telegram_exclusion_cards(current_exclusions))
+        lines.extend(format_telegram_exclusion_cards(current_exclusions, enrichments=enrichments))
     return "\n".join(lines)
 
 
@@ -335,6 +336,7 @@ def format_telegram_outcome_cards(
         if enrichment:
             lines.extend(
                 [
+                    f"독립성알림: {enrichment.independence_alert}",
                     f"감사인: {enrichment.auditor}",
                     f"수급: {enrichment.supply}",
                     f"수급점수: {enrichment.supply_score.score}/35 · {enrichment.supply_score.state}",
@@ -435,6 +437,7 @@ def format_telegram_exclusion_cards(
     exclusions: list[TradingViewExcludedSignal],
     *,
     ticker_cache: list[dict] | None = None,
+    enrichments: dict[str, KrSignalEnrichment] | None = None,
     limit: int = 12,
 ) -> list[str]:
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
@@ -452,6 +455,7 @@ def format_telegram_exclusion_cards(
     ):
         exit_date = item.exit_date or "차트 우측 최신 라벨"
         decision = evaluate_lazy_alpha_state(exclusion_label=item.exit_label)
+        enrichment = (enrichments or {}).get(item.symbol)
         lines.extend(
             [
                 "",
@@ -462,6 +466,13 @@ def format_telegram_exclusion_cards(
                 f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
             ]
         )
+        if enrichment:
+            lines.extend(
+                [
+                    f"독립성알림: {enrichment.independence_alert}",
+                    f"감사인: {enrichment.auditor}",
+                ]
+            )
     return lines
 
 
@@ -488,6 +499,7 @@ def build_kr_signal_enrichments(
             supply_score=score_supply_accumulation(supply),
             fundamental=_format_fundamental_summary(fundamental),
             auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
+            independence_alert=format_independence_alert(decision),
         )
     return enrichments
 

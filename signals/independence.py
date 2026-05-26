@@ -22,6 +22,18 @@ class IndependenceDecision:
     auditor: str | None = None
 
 
+def format_independence_alert(decision: IndependenceDecision) -> str:
+    if decision.status == "BLOCKED_CONFIRMED":
+        return "🚫 독립성 차단 — 매입 검토 금지"
+    if decision.status == "BLOCKED_POSSIBLE":
+        return "🚫 독립성 차단 가능 — 원천 확인 전 매입 보류"
+    if decision.status == "CLEAR_CONFIRMED":
+        return "🟢 독립성 확인 — 차단 감사인 없음"
+    if decision.status == "ROLLOVER_INFERRED":
+        return "🟡 감사인 추정 — 원천 확인 전 매입 보류"
+    return "🟡 독립성 확인 필요 — 원천 확인 전 매입 보류"
+
+
 def decide_independence(
     market: Market,
     audit_firm: dict,

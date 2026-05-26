@@ -375,6 +375,25 @@ def test_render_stock_lookup_report_appends_lazy_alpha_section(monkeypatch):
     assert "대상: KRX:300080" in text
 
 
+def test_render_stock_lookup_report_escalates_auditor_independence_alert(monkeypatch):
+    monkeypatch.setattr(
+        bot,
+        "fetch_all",
+        lambda ticker: (
+            {"error": "skip"},
+            {"error": "skip"},
+            {"error": "skip"},
+            {"error": "skip"},
+            {"current_year": 2026, "current_firm": "삼정회계법인", "recent": [{"year": 2026, "firm": "삼정회계법인"}]},
+        ),
+    )
+
+    text = bot.render_stock_lookup_report("083650", "비에이치아이", include_lazy_alpha=False)
+
+    assert "🚫 독립성 차단 — 매입 검토 금지" in text
+    assert text.index("🚫 독립성 차단") < text.index("📊 비에이치아이")
+
+
 def test_help_text_shortcuts_do_not_fall_through_to_stock_lookup():
     assert bot.is_help_text("기능") is True
     assert bot.is_help_text("도움말") is True
