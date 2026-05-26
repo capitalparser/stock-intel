@@ -45,6 +45,14 @@ class TradingViewLabelFlowItem:
     bar_index: int
 
 
+@dataclass(frozen=True)
+class TradingViewFlowInterpretation:
+    stage: str
+    summary: str
+    risk: str
+    action: str
+
+
 BUY_LABEL_KEYWORDS = (
     "진입",
     "추매",
@@ -284,6 +292,64 @@ def map_lazy_alpha_labels_to_flow(
     return sorted(items, key=lambda item: (item.bar_index, item.label))[-limit:]
 
 
+def interpret_lazy_alpha_flow(flow: list[TradingViewLabelFlowItem]) -> TradingViewFlowInterpretation | None:
+    if not flow:
+        return None
+    events = [_flow_event_type(item.label) for item in flow]
+    latest = events[-1]
+    exit_count = sum(1 for event in events if event in {"EXIT", "WHIPSAW"})
+    has_setup = "SETUP" in events
+    has_breakout = "BREAKOUT" in events
+    has_add = latest == "ADD"
+    has_entry_after_exit = _has_entry_after_exit(events)
+
+    if latest == "ADD":
+        stage = "재진입 후 추매 단계" if has_entry_after_exit else "추매 단계"
+        action = "신규 추격보다 눌림/손절선 기준 확인"
+    elif latest == "BREAKOUT":
+        stage = "돌파 확인"
+        action = "돌파 유지와 거래량 지속 확인"
+    elif latest == "ENTRY":
+        stage = "초기 진입"
+        action = "초기 진입 후보, 무효화 라벨 발생 여부 확인"
+    elif latest == "SETUP":
+        stage = "셋업 형성"
+        action = "진입 라벨 대기"
+    elif latest in {"EXIT", "WHIPSAW"}:
+        stage = "청산/이탈 후 대기"
+        action = "재셋업 전까지 관망"
+    else:
+        stage = "관찰"
+        action = "라벨 전환 확인"
+
+    summary_parts: list[str] = []
+    if has_setup and has_breakout:
+        summary_parts.append("셋업 후 돌파 진입")
+    elif has_breakout:
+        summary_parts.append("돌파 진입 확인")
+    elif "ENTRY" in events:
+        summary_parts.append("진입 라벨 확인")
+    if has_add:
+        summary_parts.append("현재 추매 라벨")
+    if has_entry_after_exit:
+        summary_parts.append("청산 후 재진입")
+    summary = " · ".join(summary_parts) if summary_parts else "주요 전환 라벨 확인"
+
+    if exit_count >= 2:
+        risk = f"청산/이탈 {exit_count}회로 휩쏘 이력 주의"
+    elif exit_count == 1:
+        risk = "최근 청산/이탈 이력 1회"
+    else:
+        risk = "최근 청산/이탈 라벨 없음"
+
+    return TradingViewFlowInterpretation(
+        stage=stage,
+        summary=summary,
+        risk=risk,
+        action=action,
+    )
+
+
 def _has_later_exit(last_entry_bar_index: int, exit_bar_indexes: list[int]) -> bool:
     return any(exit_bar_index > last_entry_bar_index for exit_bar_index in exit_bar_indexes)
 
@@ -307,6 +373,32 @@ def _is_flow_label(text: str) -> bool:
 
 def _compact_flow_label(text: str) -> str:
     return " / ".join(part.strip() for part in text.splitlines() if part.strip()) or text.strip()
+
+
+def _flow_event_type(label: str) -> str:
+    if "셋업" in label:
+        return "SETUP"
+    if "추매" in label:
+        return "ADD"
+    if "돌파" in label and "진입" in label:
+        return "BREAKOUT"
+    if "진입" in label:
+        return "ENTRY"
+    if "휩소" in label or "휩쏘" in label or "이탈" in label:
+        return "WHIPSAW"
+    if is_lazy_alpha_exit_label(label):
+        return "EXIT"
+    return "OTHER"
+
+
+def _has_entry_after_exit(events: list[str]) -> bool:
+    seen_exit = False
+    for event in events:
+        if event in {"EXIT", "WHIPSAW"}:
+            seen_exit = True
+        elif seen_exit and event in {"ENTRY", "BREAKOUT", "ADD"}:
+            return True
+    return False
 
 
 def _cluster_candidates(

@@ -56,6 +56,7 @@ from signals.leading_discovery import (
     score_leading_candidate,
 )
 from signals.market import Market
+from signals.tradingview_direct import interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.tradingview_scan_runner import (
     adjusted_priority_penalty,
@@ -249,7 +250,21 @@ def render_lazy_alpha_status_for_symbol(symbol: str) -> str:
         getattr(result, "label_flows", {}).get(normalize_scan_symbol(symbol), [])
     )
     if flow_lines:
+        interpretation = interpret_lazy_alpha_flow(
+            getattr(result, "label_flows", {}).get(normalize_scan_symbol(symbol), [])
+        )
         lines.extend(["", "최근 1개월 라벨 흐름", *flow_lines])
+        if interpretation:
+            lines.extend(
+                [
+                    "",
+                    "라벨 해석",
+                    f"단계: {interpretation.stage}",
+                    f"요약: {interpretation.summary}",
+                    f"주의: {interpretation.risk}",
+                    f"행동: {interpretation.action}",
+                ]
+            )
     return "\n".join(lines)
 
 

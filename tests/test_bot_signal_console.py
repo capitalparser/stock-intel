@@ -104,6 +104,9 @@ def test_render_lazy_alpha_status_reports_active_single_symbol(monkeypatch):
     assert "최근 1개월 라벨 흐름" in text
     assert "2026-05-13  🛠️ 셋업 형성 중" in text
     assert "2026-05-20  💰 진입" in text
+    assert "라벨 해석" in text
+    assert "단계: 초기 진입" in text
+    assert "행동: 초기 진입 후보" in text
 
 
 def test_render_lazy_alpha_status_prefers_latest_active_label_for_single_symbol(monkeypatch):
