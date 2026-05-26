@@ -1,5 +1,6 @@
 import json
 import socket
+import sqlite3
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -468,6 +469,42 @@ def test_parse_recommendation_cooldown_text_supports_korean_command():
     assert bot.parse_recommendation_cooldown_text("/추천쿨다운") == []
     assert bot.parse_recommendation_cooldown_text("추천쿨다운 초기화") == ["초기화"]
     assert bot.parse_recommendation_cooldown_text("추천 us") is None
+
+
+def test_parse_recommendation_cache_text_supports_korean_command():
+    assert bot.parse_recommendation_cache_text("/추천캐시") == []
+    assert bot.parse_recommendation_cache_text("추천캐시 초기화") == ["초기화"]
+    assert bot.parse_recommendation_cache_text("추천 us") is None
+
+
+def test_render_recommendation_cache_reports_stats_and_clear(monkeypatch, tmp_path):
+    db_path = tmp_path / "scan_cache.sqlite3"
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_PATH", str(db_path))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_TTL_SECONDS", "600")
+    cache = bot._tradingview_scan_cache()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO tradingview_scan_cache(cache_key, fetched_at, payload_json) VALUES (?, ?, ?)",
+            ("fresh", 1_000, "{}"),
+        )
+        conn.execute(
+            "INSERT INTO tradingview_scan_cache(cache_key, fetched_at, payload_json) VALUES (?, ?, ?)",
+            ("old", 1, "{}"),
+        )
+        conn.commit()
+    monkeypatch.setattr("signals.tradingview_scan_cache.time.time", lambda: 1_100)
+
+    text = bot.render_recommendation_cache([])
+
+    assert "🧰 추천 스캔 캐시" in text
+    assert "전체: 2건" in text
+    assert "유효: 1건" in text
+    assert "만료: 1건" in text
+
+    cleared = bot.render_recommendation_cache(["초기화"])
+
+    assert "초기화 완료" in cleared
+    assert cache.stats()["total"] == 0
 
 
 def test_render_recommendation_cooldown_report_lists_active_symbols(monkeypatch, tmp_path):

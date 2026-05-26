@@ -60,6 +60,20 @@ class TradingViewScanCache:
             )
             conn.commit()
 
+    def stats(self) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT fetched_at FROM tradingview_scan_cache").fetchall()
+        now = int(time.time())
+        total = len(rows)
+        active = sum(1 for (fetched_at,) in rows if now - int(fetched_at) <= self._ttl_seconds)
+        return {"total": total, "active": active, "expired": total - active, "ttl_seconds": self._ttl_seconds}
+
+    def clear(self) -> int:
+        with self._connect() as conn:
+            deleted = conn.execute("DELETE FROM tradingview_scan_cache").rowcount
+            conn.commit()
+        return int(deleted or 0)
+
     def _init(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:

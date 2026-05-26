@@ -134,6 +134,7 @@ HELP_TEXT = (
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/추천 kr 50 — 시세 반영 전 우선 검토 후보\n"
     "/추천쿨다운 — 추천 스캔 오류 심볼 쿨다운 조회\n"
+    "/추천캐시 — 추천 TradingView 스캔 캐시 조회\n"
     "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
     "/검증 kr 100 — 저장된 BUY 웹훅 시그널 사후검증\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
@@ -155,6 +156,7 @@ _LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", 
 _BACKTEST_TEXT_SHORTCUTS = {"검증", "백테스트", "backtest", "audit"}
 _RECOMMENDATION_TEXT_SHORTCUTS = {"추천", "후보", "추천후보", "recommend", "recommendations", "pick", "picks"}
 _RECOMMENDATION_COOLDOWN_TEXT_SHORTCUTS = {"추천쿨다운", "쿨다운", "recommendcooldown", "cooldown"}
+_RECOMMENDATION_CACHE_TEXT_SHORTCUTS = {"추천캐시", "스캔캐시", "recommendcache", "scancache"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -691,6 +693,25 @@ def render_recommendation_cooldown(args: list[str]) -> str:
     return "\n".join(lines)
 
 
+def render_recommendation_cache(args: list[str]) -> str:
+    normalized_args = [arg.strip().lower() for arg in args if arg.strip()]
+    cache = _tradingview_scan_cache()
+    if any(arg in {"초기화", "삭제", "clear", "reset"} for arg in normalized_args):
+        deleted = cache.clear()
+        return f"🧰 추천 스캔 캐시\n초기화 완료 · 삭제 {deleted}건"
+
+    stats = cache.stats()
+    lines = [
+        "🧰 추천 스캔 캐시",
+        f"전체: {stats['total']}건 · 유효: {stats['active']}건 · 만료: {stats['expired']}건",
+        f"TTL: {_fmt_duration_ko(stats['ttl_seconds'])}",
+        "",
+        "강제 새로고침: /추천 us 10 동기화",
+        "초기화: /추천캐시 초기화",
+    ]
+    return "\n".join(lines)
+
+
 def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult) -> TradingViewScanResult:
     market = options.get("market")
     requested = list(options.get("symbols") or [])
@@ -1181,6 +1202,14 @@ def parse_recommendation_cooldown_text(text: str) -> list[str] | None:
     return None
 
 
+def parse_recommendation_cache_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _RECOMMENDATION_CACHE_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -1371,6 +1400,16 @@ async def handle_recommendation_cooldown_command(update: Update, context) -> Non
     await update.message.reply_text(_truncate_telegram_text(text))
 
 
+async def handle_recommendation_cache_command(update: Update, context) -> None:
+    """/추천캐시 텍스트 트리거. 추천 TradingView 스캔 캐시를 조회/초기화한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    text = await asyncio.to_thread(render_recommendation_cache, args)
+    await update.message.reply_text(_truncate_telegram_text(text))
+
+
 async def handle_leading_discovery_command(update: Update, context) -> None:
     """/선행 텍스트 트리거. 수급+기술 전조로 국장 선행 후보를 압축한다."""
     if not await check_allowed(update):
@@ -1542,6 +1581,11 @@ async def handle_text(update: Update, context) -> None:
         text = await asyncio.to_thread(render_recommendation_cooldown, cooldown_args)
         await update.message.reply_text(_truncate_telegram_text(text))
         return
+    cache_args = parse_recommendation_cache_text(query)
+    if cache_args is not None:
+        text = await asyncio.to_thread(render_recommendation_cache, cache_args)
+        await update.message.reply_text(_truncate_telegram_text(text))
+        return
     leading_args = parse_leading_discovery_text(query)
     if leading_args is not None:
         loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
@@ -1633,6 +1677,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["recommend", "recommendations", "pick", "picks"], handle_recommendation_command))
     tg_app.add_handler(CommandHandler(["recommend_cooldown", "cooldown"], handle_recommendation_cooldown_command))
+    tg_app.add_handler(CommandHandler(["recommend_cache", "scan_cache"], handle_recommendation_cache_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["changes", "transition", "transitions"], handle_lazy_alpha_transition_command))
     tg_app.add_handler(CommandHandler(["backtest", "audit"], handle_backtest_command))
@@ -1671,6 +1716,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:추천쿨다운|쿨다운)(?:@\S+)?(?:\s+.*)?$"),
             handle_recommendation_cooldown_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:추천캐시|스캔캐시)(?:@\S+)?(?:\s+.*)?$"),
+            handle_recommendation_cache_command,
         )
     )
     tg_app.add_handler(
