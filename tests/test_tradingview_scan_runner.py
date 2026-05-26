@@ -188,6 +188,8 @@ def test_format_scan_report_includes_exclusion_reason_cards():
     assert "주요 제외 사유: 📉 모멘텀 SELL / ENTRY: 9000 1건" in text
     assert "1. KRX:300080" in text
     assert "제외: 차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
+    assert "분류: 매수 금지 · 강한 매도/손절 라벨" in text
+    assert "행동: 재셋업 전까지 관망" in text
     assert "직전 진입: 2026-05-20 · 💰 진입" in text
 
 
@@ -256,6 +258,8 @@ def test_format_scan_report_shows_only_current_exclusion_per_inactive_symbol():
     assert "2026-03-30" not in text
     assert "2026-04-23" not in text
     assert "차트 우측 최신 라벨 · ⚠️ 8선 이탈" in text
+    assert "분류: 추세 훼손 · 지지선 이탈" in text
+    assert "행동: 8선/21EMA 회복과 재진입 라벨 대기" in text
     assert "직전 진입: 2026-05-21 · 💰 진입" in text
 
 

@@ -456,6 +456,26 @@ def test_evaluate_lazy_alpha_state_blocks_momentum_sell_even_with_old_entry():
     assert "재셋업 전까지 관망" in decision.action
 
 
+def test_evaluate_lazy_alpha_state_distinguishes_exit_label_actions():
+    sell = evaluate_lazy_alpha_state(exclusion_label="📉 모멘텀 SELL\nENTRY: 9000")
+    final_exit = evaluate_lazy_alpha_state(exclusion_label="💸 최종 청산")
+    line_break = evaluate_lazy_alpha_state(exclusion_label="⚠️ 8선 이탈")
+    partial_take_profit = evaluate_lazy_alpha_state(exclusion_label="✂️ 부분 익절고려")
+
+    assert sell.verdict == "매수 금지"
+    assert "강한 매도/손절 라벨" in sell.reason
+    assert "재셋업" in sell.action
+    assert final_exit.verdict == "청산 완료"
+    assert "포지션 초기화" in final_exit.reason
+    assert "새 진입 라벨" in final_exit.action
+    assert line_break.verdict == "추세 훼손"
+    assert "지지선 이탈" in line_break.reason
+    assert "회복" in line_break.action
+    assert partial_take_profit.verdict == "보유 축소"
+    assert "부분 청산" in partial_take_profit.reason
+    assert "신규 진입보다" in partial_take_profit.action
+
+
 def test_evaluate_lazy_alpha_state_marks_conflicting_active_signal_as_chase_risk():
     decision = evaluate_lazy_alpha_state(
         outcome_label="🚀 돌파 진입 @SR↩",

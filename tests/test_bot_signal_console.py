@@ -253,7 +253,7 @@ def test_render_lazy_alpha_status_reports_excluded_single_symbol(monkeypatch):
     assert "상세 근거" in text
     assert text.index("핵심 요약") < text.index("상세 근거")
     assert "판정: 매수 후보 아님" in text
-    assert "최종판정: 매수 금지 · 📉 모멘텀 SELL / ENTRY: 9000 발생" in text
+    assert "최종판정: 매수 금지 · 강한 매도/손절 라벨: 📉 모멘텀 SELL / ENTRY: 9000" in text
     assert "기술점수: 100점" not in text
     assert "차트 우측 최신 라벨 · 📉 모멘텀 SELL / ENTRY: 9000" in text
     assert "직전 진입: 2026-05-20 · 💰 진입" in text

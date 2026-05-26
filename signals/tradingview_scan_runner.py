@@ -397,11 +397,14 @@ def format_telegram_exclusion_cards(
         start=1,
     ):
         exit_date = item.exit_date or "차트 우측 최신 라벨"
+        decision = evaluate_lazy_alpha_state(exclusion_label=item.exit_label)
         lines.extend(
             [
                 "",
                 f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)}",
                 f"제외: {exit_date} · {_compact_label(item.exit_label)}",
+                f"분류: {decision.verdict} · {decision.reason}",
+                f"행동: {decision.action}",
                 f"직전 진입: {item.signal_date} · {_compact_label(item.label)}",
             ]
         )

@@ -470,17 +470,7 @@ def evaluate_lazy_alpha_state(
 ) -> TradingViewStateDecision:
     label = outcome_label if outcome_label is not None else (outcome.label if outcome else None)
     if exclusion_label:
-        if "SELL" in exclusion_label or "매도" in exclusion_label:
-            return TradingViewStateDecision(
-                verdict="매수 금지",
-                reason=f"{_compact_flow_label(exclusion_label)} 발생",
-                action="재셋업 전까지 관망",
-            )
-        return TradingViewStateDecision(
-            verdict="청산/관망",
-            reason=f"{_compact_flow_label(exclusion_label)} 발생",
-            action="새 진입 라벨 또는 매수 자격 회복 대기",
-        )
+        return classify_lazy_alpha_exclusion(exclusion_label)
 
     table_parts = " ".join(
         part or "" for part in [table_signal, table_conviction, table_buy_eligibility]
@@ -519,6 +509,45 @@ def evaluate_lazy_alpha_state(
         verdict="청산/관망",
         reason="활성 매수 라벨 없음",
         action="셋업 형성 또는 진입 라벨 대기",
+    )
+
+
+def classify_lazy_alpha_exclusion(exclusion_label: str) -> TradingViewStateDecision:
+    compact = _compact_flow_label(exclusion_label)
+    if any(keyword in exclusion_label for keyword in ["SELL", "매도", "손절", "SL"]):
+        return TradingViewStateDecision(
+            verdict="매수 금지",
+            reason=f"강한 매도/손절 라벨: {compact}",
+            action="재셋업 전까지 관망",
+        )
+    if any(keyword in exclusion_label for keyword in ["최종 청산", "돌파 청산", "청산"]):
+        return TradingViewStateDecision(
+            verdict="청산 완료",
+            reason=f"포지션 초기화 라벨: {compact}",
+            action="새 진입 라벨 전까지 관망",
+        )
+    if any(keyword in exclusion_label for keyword in ["8선 이탈", "21 EMA 이탈", "횡보 이탈", "하방 이탈", "이탈"]):
+        return TradingViewStateDecision(
+            verdict="추세 훼손",
+            reason=f"지지선 이탈: {compact}",
+            action="8선/21EMA 회복과 재진입 라벨 대기",
+        )
+    if any(keyword in exclusion_label for keyword in ["부분 익절", "분할청산", "익절고려", "익절"]):
+        return TradingViewStateDecision(
+            verdict="보유 축소",
+            reason=f"부분 청산 라벨: {compact}",
+            action="신규 진입보다 잔여 포지션 관리와 재돌파 확인",
+        )
+    if "종료" in exclusion_label:
+        return TradingViewStateDecision(
+            verdict="전략 종료",
+            reason=f"셋업 종료 라벨: {compact}",
+            action="새 채널/셋업 형성 전까지 관망",
+        )
+    return TradingViewStateDecision(
+        verdict="청산/관망",
+        reason=f"무효화 라벨: {compact}",
+        action="새 진입 라벨 또는 매수 자격 회복 대기",
     )
 
 
