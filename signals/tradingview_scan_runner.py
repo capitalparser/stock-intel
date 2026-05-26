@@ -459,6 +459,7 @@ def format_recommendation_report(
     *,
     scanned: int,
     errors: list[tuple[str, str]],
+    exclusions: list[TradingViewExcludedSignal] | None = None,
     ticker_cache: list[dict] | None = None,
     table_snapshots: dict[str, TradingViewTableSnapshot | None] | None = None,
     limit: int = 12,
@@ -476,6 +477,7 @@ def format_recommendation_report(
             [
                 "표시할 추천 후보가 없습니다.",
                 "조건: 활성 매수 라벨 + 낮은 시세반영 페널티 + 수급/흐름 보강",
+                *_empty_recommendation_diagnostics(scanned=scanned, errors=errors, exclusions=exclusions or []),
             ]
         )
     for index, item in enumerate(candidates[:limit], start=1):
@@ -508,9 +510,34 @@ def format_recommendation_report(
         if table:
             lines.extend(format_lazy_alpha_table_card_lines(table))
         lines.append("")
-    if errors:
+    if errors and candidates:
         lines.append("오류: " + " · ".join(symbol for symbol, _error in errors[:5]))
     return "\n".join(lines).rstrip()
+
+
+def _empty_recommendation_diagnostics(
+    *,
+    scanned: int,
+    errors: list[tuple[str, str]],
+    exclusions: list[TradingViewExcludedSignal],
+) -> list[str]:
+    lines = [
+        f"진단: 오류 {len(errors)}건 · 제외 {len(exclusions)}건 · 활성 매수 후보 0건",
+    ]
+    if errors:
+        lines.append("오류 심볼: " + " · ".join(symbol for symbol, _error in errors[:6]))
+    if exclusions:
+        reason_counts = Counter(_compact_label(item.exit_label) for item in exclusions)
+        summary = " · ".join(f"{reason} {count}건" for reason, count in reason_counts.most_common(4))
+        lines.append(f"제외 사유: {summary}")
+    if scanned == 0 and errors:
+        lines.append("해석: TradingView가 해당 심볼을 열지 못해 실제 라벨 판정까지 가지 못했습니다.")
+    elif scanned > 0 and exclusions and not errors:
+        lines.append("해석: 진입 이후 청산/손절/이탈 라벨이 확인되어 추천 후보에서 제외됐습니다.")
+    elif scanned > 0:
+        lines.append("해석: 차트는 읽었지만 현재 활성 매수 라벨이 없습니다.")
+    lines.append("다음 확인: /추천 us 10 동기화 또는 /추천 kr 20 동기화")
+    return lines
 
 
 def format_lazy_alpha_table_card_lines(table: TradingViewTableSnapshot) -> list[str]:

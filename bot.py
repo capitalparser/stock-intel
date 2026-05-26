@@ -632,6 +632,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         candidates,
         scanned=len(result.scanned),
         errors=result.errors,
+        exclusions=result.exclusions,
         table_snapshots=result.table_snapshots,
     )
 

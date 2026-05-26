@@ -794,6 +794,35 @@ def test_format_recommendation_report_is_actionable_telegram_card():
     assert "symbol |" not in text
 
 
+def test_empty_recommendation_report_explains_errors_and_exclusions():
+    exclusion = TradingViewExcludedSignal(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-20",
+        label="💰 진입",
+        exit_date="2026-05-24",
+        exit_label="💸 최종 청산",
+        entry_bar_index=100,
+        exit_bar_index=104,
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    text = format_recommendation_report(
+        [],
+        scanned=2,
+        errors=[("AMEX:BMNR", "symbol not found")],
+        exclusions=[exclusion],
+    )
+
+    assert "표시할 추천 후보가 없습니다." in text
+    assert "진단: 오류 1건 · 제외 1건 · 활성 매수 후보 0건" in text
+    assert "오류 심볼: AMEX:BMNR" in text
+    assert "제외 사유: 💸 최종 청산 1건" in text
+    assert "다음 확인: /추천 us 10 동기화" in text
+    assert "\n오류: AMEX:BMNR" not in text
+
+
 def test_build_signal_enrichments_adds_manual_verify_for_us_and_jp_candidates():
     us = TradingViewLabelOutcome(
         symbol="NASDAQ:AAPL",
