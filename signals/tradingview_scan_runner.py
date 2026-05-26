@@ -48,7 +48,7 @@ class TradingViewScanResult:
 @dataclass(frozen=True)
 class KrSignalEnrichment:
     supply: str
-    supply_score: SupplyScore
+    supply_score: SupplyScore | None
     fundamental: str
     auditor: str
     independence_alert: str
@@ -337,7 +337,7 @@ def format_telegram_outcome_cards(
         )
         enrichment = (enrichments or {}).get(item.symbol)
         score_label = f"기술점수 {score}점"
-        if enrichment:
+        if enrichment and enrichment.supply_score is not None:
             composite_score = _composite_signal_score(score, enrichment.supply_score.score)
             score_label = f"종합점수 {composite_score}점 · 기술점수 {score}점"
         lines.extend(
@@ -358,13 +358,14 @@ def format_telegram_outcome_cards(
                     f"독립성알림: {enrichment.independence_alert}",
                     f"감사인: {enrichment.auditor}",
                     f"수급: {enrichment.supply}",
-                    f"수급점수: {enrichment.supply_score.score}/35 · {enrichment.supply_score.state}",
                     f"실적/밸류: {enrichment.fundamental}",
                 ]
             )
-            if enrichment.supply_score.evidence:
+            if enrichment.supply_score is not None:
+                lines.append(f"수급점수: {enrichment.supply_score.score}/35 · {enrichment.supply_score.state}")
+            if enrichment.supply_score is not None and enrichment.supply_score.evidence:
                 lines.append("수급근거: " + " · ".join(enrichment.supply_score.evidence[:3]))
-            if enrichment.supply_score.risks:
+            if enrichment.supply_score is not None and enrichment.supply_score.risks:
                 lines.append("수급리스크: " + " · ".join(enrichment.supply_score.risks[:2]))
         if table:
             lines.extend(format_lazy_alpha_table_card_lines(table))
@@ -393,7 +394,7 @@ def _card_sort_key(
     flow_adjustment = interpretation.score_adjustment if interpretation else 0
     technical_score = max(0, min(100, 100 - adjusted_priority_penalty(item) + flow_adjustment))
     enrichment = enrichments.get(item.symbol)
-    if enrichment:
+    if enrichment and enrichment.supply_score is not None:
         return (-_composite_signal_score(technical_score, enrichment.supply_score.score), adjusted_priority_penalty(item), item.symbol)
     return (-technical_score, adjusted_priority_penalty(item), item.symbol)
 
@@ -414,7 +415,7 @@ def recommend_signal_candidates(
         interpretation = interpret_lazy_alpha_flow((label_flows or {}).get(outcome.symbol, []))
         flow_adjustment = interpretation.score_adjustment if interpretation else 0
         technical_score = max(0, min(100, 100 - adjusted_priority_penalty(outcome) + flow_adjustment))
-        supply_score = enrichment.supply_score.score if enrichment else None
+        supply_score = enrichment.supply_score.score if enrichment and enrichment.supply_score is not None else None
         reflection_penalty, reflection_risks = _reflection_penalty(outcome)
         base_score = technical_score * 0.72
         if supply_score is not None:
@@ -607,12 +608,47 @@ def build_kr_signal_enrichments(
     fundamental_lookup: Callable[[str], dict],
     audit_lookup: Callable[[str], dict],
 ) -> dict[str, KrSignalEnrichment]:
+    return {
+        symbol: enrichment
+        for symbol, enrichment in build_signal_enrichments(
+            outcomes,
+            supply_lookup=supply_lookup,
+            fundamental_lookup=fundamental_lookup,
+            audit_lookup=audit_lookup,
+        ).items()
+        if enrichment.supply_score is not None
+    }
+
+
+def build_signal_enrichments(
+    outcomes: list[TradingViewLabelOutcome | TradingViewExcludedSignal],
+    *,
+    supply_lookup: Callable[[str], dict],
+    fundamental_lookup: Callable[[str], dict],
+    audit_lookup: Callable[[str], dict],
+) -> dict[str, KrSignalEnrichment]:
     enrichments: dict[str, KrSignalEnrichment] = {}
     for item in outcomes:
         if item.market != "KR":
+            decision = decide_independence(_market_object(item.market), {})
+            enrichments[item.symbol] = KrSignalEnrichment(
+                supply="자동 수급 미지원",
+                supply_score=None,
+                fundamental="자동 펀더멘털 미지원",
+                auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
+                independence_alert=format_independence_alert(decision),
+            )
             continue
         ticker = ticker_for_lookup(item.symbol, "KR")
         if not ticker.isdigit() or len(ticker) != 6:
+            decision = decide_independence(Market("KR", "한국"), {})
+            enrichments[item.symbol] = KrSignalEnrichment(
+                supply="데이터 없음",
+                supply_score=None,
+                fundamental="데이터 없음",
+                auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
+                independence_alert=format_independence_alert(decision),
+            )
             continue
         supply = _safe_lookup(supply_lookup, ticker)
         fundamental = _safe_lookup(fundamental_lookup, ticker)
@@ -626,6 +662,11 @@ def build_kr_signal_enrichments(
             independence_alert=format_independence_alert(decision),
         )
     return enrichments
+
+
+def _market_object(market_code: str) -> Market:
+    labels = {"US": "미국", "JP": "일본", "KR": "한국"}
+    return Market(market_code, labels.get(market_code, market_code))
 
 
 def _safe_lookup(lookup: Callable[[str], dict], ticker: str) -> dict:
@@ -671,9 +712,14 @@ def _format_auditor_summary(status: str, auditor: str | None, reason: str) -> st
         "CLEAR_CONFIRMED": "차단 없음",
         "ROLLOVER_INFERRED": "감사인 추정 확인 필요",
         "MANUAL_VERIFY_CURRENT_YEAR": "현재연도 감사인 확인 필요",
+        "MANUAL_VERIFY": "수동 확인 필요",
         "DATA_MISSING": "감사인 데이터 없음",
+        "UNKNOWN_MARKET": "시장 확인 필요",
     }
-    return f"{labels.get(status, status)} · {auditor or '-'} · {reason}"
+    label = labels.get(status, status)
+    if not auditor:
+        return f"{label} · {reason}"
+    return f"{label} · {auditor} · {reason}"
 
 
 def _compact_label(text: str) -> str:
@@ -781,7 +827,7 @@ def _recommendation_evidence(
     technical_score: int,
 ) -> list[str]:
     evidence = [f"활성 매수 라벨", f"기술 {technical_score}점"]
-    if enrichment:
+    if enrichment and enrichment.supply_score is not None:
         evidence.append(f"수급 {enrichment.supply_score.state}")
     if interpretation:
         evidence.append(f"라벨흐름 {interpretation.pattern}")

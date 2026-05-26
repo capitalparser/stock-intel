@@ -5,6 +5,7 @@ from pathlib import Path
 from signals.tradingview_scan_runner import (
     TradingViewCli,
     build_kr_signal_enrichments,
+    build_signal_enrichments,
     format_recommendation_report,
     format_telegram_exclusion_cards,
     format_scan_report,
@@ -791,3 +792,79 @@ def test_format_recommendation_report_is_actionable_telegram_card():
     assert "추천점수:" in text
     assert "다음 행동:" in text
     assert "symbol |" not in text
+
+
+def test_build_signal_enrichments_adds_manual_verify_for_us_and_jp_candidates():
+    us = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    jp = TradingViewLabelOutcome(
+        symbol="TSE:7203",
+        market="JP",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=3000,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    enrichments = build_signal_enrichments(
+        [us, jp],
+        supply_lookup=lambda ticker: {},
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    assert "EDGAR" in enrichments["NASDAQ:AAPL"].auditor
+    assert "EDINET" in enrichments["TSE:7203"].auditor
+    assert enrichments["NASDAQ:AAPL"].supply_score is None
+    assert enrichments["NASDAQ:AAPL"].independence_alert.startswith("🟡 독립성 확인 필요")
+
+
+def test_us_recommendation_report_includes_manual_independence_context():
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {},
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    text = format_recommendation_report(
+        recommend_signal_candidates([outcome], enrichments=enrichments),
+        scanned=1,
+        errors=[],
+    )
+
+    assert "NASDAQ:AAPL" in text
+    assert "독립성알림: 🟡 독립성 확인 필요 — 원천 확인 전 매입 보류" in text
+    assert "감사인: 수동 확인 필요 · 미국 종목 감사인 자동 확인 미지원. EDGAR/10-K 등 원천 확인 필요." in text

@@ -218,7 +218,7 @@ def test_render_tradingview_scan_uses_latest_cluster_policy(monkeypatch):
         )
 
     monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
-    monkeypatch.setattr(bot, "build_kr_signal_enrichments", lambda outcomes, **kwargs: {})
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
 
     bot.render_tradingview_scan(["KRX:437730"])
 
@@ -255,7 +255,7 @@ def test_render_tradingview_scan_batches_full_universe(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
-    monkeypatch.setattr(bot, "build_kr_signal_enrichments", lambda outcomes, **kwargs: {})
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
 
     text = bot.render_tradingview_scan(["전체", "kr", "5"])
 
@@ -590,7 +590,7 @@ def test_render_signal_recommendations_uses_scan_results(monkeypatch):
     )
     monkeypatch.setattr(
         bot,
-        "build_kr_signal_enrichments",
+        "build_signal_enrichments",
         lambda outcomes, **kwargs: {},
     )
 

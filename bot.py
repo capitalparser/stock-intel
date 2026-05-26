@@ -78,7 +78,7 @@ from signals.telegram import send_telegram_message
 from signals.tradingview_scan_runner import (
     TradingViewScanResult,
     adjusted_priority_penalty,
-    build_kr_signal_enrichments,
+    build_signal_enrichments,
     format_scan_report,
     format_recommendation_report,
     normalize_scan_symbol,
@@ -570,7 +570,7 @@ def render_tradingview_scan(args: list[str]) -> str:
     outcomes = result.outcomes
     if options["sort"] == "SCORE":
         outcomes = sorted(outcomes, key=priority_sort_key)
-    enrichments = build_kr_signal_enrichments(
+    enrichments = build_signal_enrichments(
         [*outcomes, *result.exclusions],
         supply_lookup=fetch_supply,
         fundamental_lookup=fetch_fundamental,
@@ -613,7 +613,7 @@ def render_signal_recommendations(args: list[str]) -> str:
         options["symbols"],
         batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
     )
-    enrichments = build_kr_signal_enrichments(
+    enrichments = build_signal_enrichments(
         result.outcomes,
         supply_lookup=fetch_supply,
         fundamental_lookup=fetch_fundamental,
