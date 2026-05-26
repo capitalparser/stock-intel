@@ -589,7 +589,7 @@ def test_render_signal_recommendations_uses_scan_results(monkeypatch):
     monkeypatch.setattr(
         bot,
         "_scan_tradingview_symbols_batched",
-        lambda symbols, batch_size: (
+        lambda symbols, batch_size, **kwargs: (
             SimpleNamespace(
                 outcomes=[outcome],
                 exclusions=[],
@@ -641,7 +641,7 @@ def test_render_signal_recommendations_supplements_universe_after_initial_errors
     )
     calls = []
 
-    def fake_scan(symbols, batch_size):
+    def fake_scan(symbols, batch_size, **kwargs):
         calls.append(list(symbols))
         if symbols == ["AMEX:BMNR"]:
             return (
@@ -691,7 +691,7 @@ def test_render_signal_recommendations_supplements_when_initial_scan_has_no_cand
     )
     calls = []
 
-    def fake_scan(symbols, batch_size):
+    def fake_scan(symbols, batch_size, **kwargs):
         calls.append(list(symbols))
         if symbols == ["NASDAQ:MSFT"]:
             return (
@@ -762,7 +762,7 @@ def test_render_signal_recommendations_keeps_supplementing_until_target_candidat
     )
     calls = []
 
-    def fake_scan(symbols, batch_size):
+    def fake_scan(symbols, batch_size, **kwargs):
         calls.append(list(symbols))
         outcomes = []
         if symbols == ["NYSE:PLTR"]:
@@ -791,6 +791,100 @@ def test_render_signal_recommendations_keeps_supplementing_until_target_candidat
     assert "NASDAQ:NVDA" in text
 
 
+def test_render_signal_recommendations_uses_cached_scan_without_forcing_universe_sync(monkeypatch, tmp_path):
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_PATH", str(tmp_path / "scan_cache.sqlite3"))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_TTL_SECONDS", "600")
+    monkeypatch.setattr(
+        bot,
+        "sync_universe_from_tradingview",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("recommendation should not force universe sync")),
+    )
+    monkeypatch.setattr(
+        bot,
+        "symbols_from_universe",
+        lambda path, limit, market=None: ["NASDAQ:AAPL"],
+    )
+    calls = []
+
+    def fake_scan(symbols, **kwargs):
+        calls.append(list(symbols))
+        return SimpleNamespace(
+            outcomes=[outcome],
+            exclusions=[],
+            errors=[],
+            scanned=["NASDAQ:AAPL"],
+            label_flows={},
+            table_snapshots={},
+        )
+
+    monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    first = bot.render_signal_recommendations(["us", "1"])
+    second = bot.render_signal_recommendations(["us", "1"])
+
+    assert calls == [["NASDAQ:AAPL"]]
+    assert "NASDAQ:AAPL" in first
+    assert "NASDAQ:AAPL" in second
+
+
+def test_render_signal_recommendations_sync_arg_bypasses_scan_cache(monkeypatch, tmp_path):
+    outcome = TradingViewLabelOutcome(
+        symbol="NASDAQ:AAPL",
+        market="US",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=190,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_PATH", str(tmp_path / "scan_cache.sqlite3"))
+    monkeypatch.setenv("TRADINGVIEW_SCAN_CACHE_TTL_SECONDS", "600")
+    monkeypatch.setattr(bot, "sync_universe_from_tradingview", lambda **kwargs: None)
+    monkeypatch.setattr(bot, "symbols_from_universe", lambda path, limit, market=None: ["NASDAQ:AAPL"])
+    calls = []
+
+    def fake_scan(symbols, **kwargs):
+        calls.append(list(symbols))
+        return SimpleNamespace(
+            outcomes=[outcome],
+            exclusions=[],
+            errors=[],
+            scanned=["NASDAQ:AAPL"],
+            label_flows={},
+            table_snapshots={},
+        )
+
+    monkeypatch.setattr(bot, "scan_tradingview_symbols", fake_scan)
+    monkeypatch.setattr(bot, "build_signal_enrichments", lambda outcomes, **kwargs: {})
+
+    bot.render_signal_recommendations(["us", "1"])
+    bot.render_signal_recommendations(["us", "1", "동기화"])
+
+    assert calls == [["NASDAQ:AAPL"], ["NASDAQ:AAPL"]]
+
+
 def test_render_signal_recommendations_does_not_supplement_explicit_symbol(monkeypatch, tmp_path):
     monkeypatch.setenv("UNIVERSE_SNAPSHOT_PATH", str(tmp_path / "universe.json"))
     monkeypatch.setattr(
@@ -805,7 +899,7 @@ def test_render_signal_recommendations_does_not_supplement_explicit_symbol(monke
     )
     calls = []
 
-    def fake_scan(symbols, batch_size):
+    def fake_scan(symbols, batch_size, **kwargs):
         calls.append(list(symbols))
         return (
             SimpleNamespace(outcomes=[], exclusions=[], errors=[], scanned=["NASDAQ:MSFT"], label_flows={}, table_snapshots={}),

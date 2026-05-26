@@ -87,6 +87,7 @@ from signals.tradingview_scan_runner import (
     scan_tradingview_symbols,
     symbols_from_universe,
 )
+from signals.tradingview_scan_cache import TradingViewScanCache
 from signals.universe import (
     format_universe_summary,
     load_universe_snapshot,
@@ -607,11 +608,13 @@ def render_lazy_alpha_transition_report(args: list[str]) -> str:
 
 
 def render_signal_recommendations(args: list[str]) -> str:
-    scan_args = ["활성만", "점수", "50", "동기화", *args]
+    scan_args = ["활성만", "점수", "50", *args]
     options = parse_tradingview_scan_args(scan_args)
     result, _batch_count = _scan_tradingview_symbols_batched(
         options["symbols"],
         batch_size=int(os.getenv("TRADINGVIEW_SCAN_BATCH_SIZE", "12")),
+        use_cache=True,
+        force_refresh=bool(options.get("sync")),
     )
     result = _supplement_recommendation_scan(options, result)
     enrichments = build_signal_enrichments(
@@ -659,23 +662,30 @@ def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult
         chunk = supplements[index : index + batch_size]
         if not chunk:
             break
-        supplement_result, _batch_count = _scan_tradingview_symbols_batched(chunk, batch_size=batch_size)
+        supplement_result, _batch_count = _scan_tradingview_symbols_batched(
+            chunk,
+            batch_size=batch_size,
+            use_cache=True,
+            force_refresh=bool(options.get("sync")),
+        )
         merged = _merge_scan_results([merged, supplement_result])
     return merged
 
 
-def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) -> tuple[TradingViewScanResult, int]:
+def _scan_tradingview_symbols_batched(
+    symbols: list[str],
+    *,
+    batch_size: int,
+    use_cache: bool = False,
+    force_refresh: bool = False,
+) -> tuple[TradingViewScanResult, int]:
     safe_batch_size = max(1, batch_size)
     chunks = [symbols[index : index + safe_batch_size] for index in range(0, len(symbols), safe_batch_size)] or [[]]
     results = [
-        scan_tradingview_symbols(
+        _scan_tradingview_chunk(
             chunk,
-            mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
-            bars=500,
-            max_labels=250,
-            timeframe="D",
-            entry_policy="last",
-            sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
+            use_cache=use_cache,
+            force_refresh=force_refresh,
         )
         for chunk in chunks
         if chunk
@@ -685,6 +695,41 @@ def _scan_tradingview_symbols_batched(symbols: list[str], *, batch_size: int) ->
     return (
         _merge_scan_results(results),
         len(results),
+    )
+
+
+def _scan_tradingview_chunk(
+    symbols: list[str],
+    *,
+    use_cache: bool,
+    force_refresh: bool,
+) -> TradingViewScanResult:
+    context = {
+        "bars": 500,
+        "max_labels": 250,
+        "timeframe": "D",
+        "entry_policy": "last",
+    }
+    cache = _tradingview_scan_cache() if use_cache else None
+    if cache is not None and not force_refresh:
+        cached = cache.get(symbols=symbols, context=context)
+        if cached is not None:
+            return cached
+    result = scan_tradingview_symbols(
+        symbols,
+        mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
+        sleep_seconds=float(os.getenv("TRADINGVIEW_SCAN_SLEEP", "2.0")),
+        **context,
+    )
+    if cache is not None:
+        cache.set(symbols=symbols, context=context, result=result)
+    return result
+
+
+def _tradingview_scan_cache() -> TradingViewScanCache:
+    return TradingViewScanCache(
+        os.getenv("TRADINGVIEW_SCAN_CACHE_PATH", "./state/tradingview_scan_cache.sqlite3"),
+        ttl_seconds=int(os.getenv("TRADINGVIEW_SCAN_CACHE_TTL_SECONDS", "600")),
     )
 
 
