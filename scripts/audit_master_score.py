@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from signals.backtest import audit_signal_outcomes, format_outcome_report
-from signals.price_history import PykrxPriceHistoryProvider
+from signals.backtest import audit_signal_outcomes, format_calibration_report
+from signals.price_history import CachedPriceHistoryProvider, MarketPriceHistoryProvider
 from signals.storage import SignalStore
 
 
@@ -22,12 +22,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", default=os.getenv("STATE_DB_PATH", "state.db"))
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--action", default="BUY")
+    parser.add_argument("--market", choices=["KR", "US", "JP"], default="KR")
     args = parser.parse_args(argv)
 
     store = SignalStore(args.db)
-    rows = store.events_for_audit(limit=args.limit, action=args.action.upper())
-    outcomes = audit_signal_outcomes(rows, price_provider=PykrxPriceHistoryProvider())
-    print(format_outcome_report(outcomes))
+    rows = [
+        row
+        for row in store.events_for_audit(limit=args.limit, action=args.action.upper())
+        if row.market == args.market
+    ]
+    provider = CachedPriceHistoryProvider(
+        MarketPriceHistoryProvider(),
+        db_path=os.getenv("PRICE_HISTORY_CACHE_DB", args.db),
+        ttl_seconds=int(os.getenv("PRICE_HISTORY_CACHE_TTL_SECONDS", str(6 * 3600))),
+    )
+    outcomes = audit_signal_outcomes(rows, price_provider=provider)
+    print(format_calibration_report(outcomes))
     return 0
 
 

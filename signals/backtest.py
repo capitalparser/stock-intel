@@ -76,7 +76,7 @@ def audit_signal_outcomes(
         end = (datetime.fromisoformat(signal_date) + timedelta(days=max(horizons) * 3 + 10)).date().isoformat()
         try:
             closes = price_provider.closes(
-                ticker=ticker_for_lookup(row.ticker, row.market),
+                ticker=_ticker_for_price_provider(row),
                 market=row.market,
                 start=start,
                 end=end,
@@ -221,6 +221,15 @@ def _payload(row: SignalEventRow) -> dict:
         return json.loads(row.payload_json)
     except json.JSONDecodeError:
         return {}
+
+
+def _ticker_for_price_provider(row: SignalEventRow) -> str:
+    if ":" in row.ticker:
+        return row.ticker
+    exchange = (row.exchange or "").strip().upper()
+    if exchange:
+        return f"{exchange}:{row.ticker}"
+    return ticker_for_lookup(row.ticker, row.market)
 
 
 def _entry_price(payload: dict, closes: list[PricePoint]) -> float | None:

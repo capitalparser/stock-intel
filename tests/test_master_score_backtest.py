@@ -42,7 +42,7 @@ def test_audit_signal_outcomes_scores_event_and_calculates_forward_returns():
 
     outcomes = audit_signal_outcomes([row], price_provider=provider, horizons=(5, 10, 20))
 
-    assert provider.calls[0]["ticker"] == "AAPL"
+    assert provider.calls[0]["ticker"] == "NASDAQ:AAPL"
     assert provider.calls[0]["market"] == "US"
     assert provider.calls[0]["start"] == "2026-01-02"
     assert outcomes[0].master_score is not None

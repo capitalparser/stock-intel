@@ -67,7 +67,11 @@ from signals.leading_discovery import (
     score_leading_candidate,
 )
 from signals.market import Market
-from signals.price_history import PykrxPriceHistoryProvider
+from signals.price_history import (
+    CachedPriceHistoryProvider,
+    MarketPriceHistoryProvider,
+    TradingViewPriceHistoryProvider,
+)
 from signals.tradingview_direct import TradingViewTableSnapshot, evaluate_lazy_alpha_state, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.telegram import send_telegram_message
@@ -669,18 +673,31 @@ def render_backtest_report(
     price_provider: PriceHistoryProvider | None = None,
 ) -> str:
     options = parse_backtest_args(args)
-    if options["market"] != "KR":
-        return "🧪 Master Score 사후검증\n현재 가격 히스토리 provider는 국장(KR)만 지원합니다."
     rows = [
         row
         for row in _signal_store().events_for_audit(limit=options["limit"], action="BUY")
-        if row.market == "KR"
+        if row.market == options["market"]
     ]
     outcomes = audit_signal_outcomes(
         rows,
-        price_provider=price_provider or PykrxPriceHistoryProvider(),
+        price_provider=price_provider or _price_history_provider(),
     )
     return format_calibration_report(outcomes)
+
+
+def _price_history_provider() -> PriceHistoryProvider:
+    base = MarketPriceHistoryProvider(
+        tradingview_provider=TradingViewPriceHistoryProvider(
+            mcp_dir=Path(os.getenv("TRADINGVIEW_MCP_DIR", "/Users/kjun/code/tradingview-mcp")),
+            bars=int(os.getenv("PRICE_HISTORY_TRADINGVIEW_BARS", "900")),
+            sleep_seconds=float(os.getenv("PRICE_HISTORY_TRADINGVIEW_SLEEP", "1.0")),
+        )
+    )
+    return CachedPriceHistoryProvider(
+        base,
+        db_path=os.getenv("PRICE_HISTORY_CACHE_DB", os.getenv("STATE_DB_PATH", "./state.db")),
+        ttl_seconds=int(os.getenv("PRICE_HISTORY_CACHE_TTL_SECONDS", str(6 * 3600))),
+    )
 
 
 def parse_backtest_args(args: list[str]) -> dict:

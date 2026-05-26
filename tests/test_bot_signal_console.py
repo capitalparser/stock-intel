@@ -471,6 +471,30 @@ def test_render_backtest_report_uses_saved_buy_events(tmp_path, monkeypatch):
     assert "ticker |" not in text
 
 
+def test_render_backtest_report_supports_us_events_with_injected_provider(tmp_path, monkeypatch):
+    db_path = tmp_path / "signals.db"
+    store = SignalStore(db_path)
+    store.put_event(
+        signal=load_signal("tradingview_v6_2_buy_aapl.json"),
+        market="US",
+        independence_status="MANUAL_VERIFY",
+        filter_status="ALLOWED",
+        telegram_sent=True,
+        received_at=1_767_288_600,
+    )
+    monkeypatch.setenv("STATE_DB_PATH", str(db_path))
+    provider = bot.PriceHistoryProvider()
+    provider.closes = lambda **kwargs: [
+        bot.PricePoint(date=f"2026-01-{day:02d}", close=190 + day)
+        for day in range(2, 24)
+    ]
+
+    text = bot.render_backtest_report(["us", "20"], price_provider=provider)
+
+    assert "현재 가격 히스토리 provider는 국장" not in text
+    assert "샘플: 1건 · 유효: 1건" in text
+
+
 def test_render_leading_discovery_combines_supply_and_technical_scores(monkeypatch):
     monkeypatch.setattr(bot, "_leading_kr_symbol_pool", lambda limit, use_universe: ["KRX:103590"])
     monkeypatch.setattr(bot, "_ticker_name_map", lambda: {"103590": "일진전기"})
