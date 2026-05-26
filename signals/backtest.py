@@ -37,6 +37,7 @@ class SignalOutcome:
     entry_price: float | None
     returns: dict[str, float | None]
     status: str
+    independence_status: str | None = None
     warning: str | None = None
 
 
@@ -56,6 +57,7 @@ class OutcomeCalibrationSummary:
     buckets: dict[str, OutcomeBucketSummary]
     failure_modes: dict[str, int]
     status_counts: dict[str, int]
+    independence_status_counts: dict[str, int]
 
 
 def audit_signal_outcomes(
@@ -93,6 +95,7 @@ def audit_signal_outcomes(
                     entry_price=_float_or_none(payload.get("price")),
                     returns={f"{h}d": None for h in horizons},
                     status="price_error",
+                    independence_status=row.independence_status,
                     warning=str(exc),
                 )
             )
@@ -115,6 +118,7 @@ def audit_signal_outcomes(
                 entry_price=entry,
                 returns=returns,
                 status=status,
+                independence_status=row.independence_status,
                 warning=None if status == "ok" else "not enough future trading days",
             )
         )
@@ -125,9 +129,14 @@ def summarize_outcomes(outcomes: list[SignalOutcome]) -> OutcomeCalibrationSumma
     status_counts: dict[str, int] = {}
     bucket_items: dict[str, list[SignalOutcome]] = {bucket: [] for bucket in _BUCKET_ORDER}
     failure_modes: dict[str, int] = {}
+    independence_status_counts: dict[str, int] = {}
 
     for outcome in outcomes:
         status_counts[outcome.status] = status_counts.get(outcome.status, 0) + 1
+        if outcome.independence_status:
+            independence_status_counts[outcome.independence_status] = (
+                independence_status_counts.get(outcome.independence_status, 0) + 1
+            )
         if outcome.status != "ok":
             continue
         bucket_items[_score_bucket(outcome.master_score)].append(outcome)
@@ -146,6 +155,7 @@ def summarize_outcomes(outcomes: list[SignalOutcome]) -> OutcomeCalibrationSumma
         buckets=buckets,
         failure_modes=failure_modes,
         status_counts=status_counts,
+        independence_status_counts=independence_status_counts,
     )
 
 
@@ -176,6 +186,12 @@ def format_calibration_report(outcomes: list[SignalOutcome]) -> str:
         lines.append("실패유형: " + " · ".join(
             f"{name} {count}건" for name, count in summary.failure_modes.items()
         ))
+
+    independence_line = _format_independence_status_counts(summary.independence_status_counts)
+    if independence_line:
+        lines.append("")
+        lines.append("독립성표본: " + independence_line)
+        lines.append("해석: 차단/보류 신호는 수익률과 별개로 매입 후보에서 제외 또는 원천 확인 대상입니다.")
 
     non_ok = {
         status: count
@@ -310,3 +326,21 @@ def _failure_mode(outcome: SignalOutcome) -> str | None:
     ):
         return "페이크/휩쏘 돌파"
     return "미분류: 뉴스/섹터/실적 확인 필요"
+
+
+def _format_independence_status_counts(counts: dict[str, int]) -> str | None:
+    watched = {
+        "BLOCKED_CONFIRMED": "차단 확정",
+        "BLOCKED_POSSIBLE": "차단 가능",
+        "MANUAL_VERIFY": "원천 확인 필요",
+        "MANUAL_VERIFY_CURRENT_YEAR": "현재연도 확인 필요",
+        "DATA_MISSING": "감사인 데이터 없음",
+        "UNKNOWN_MARKET": "시장 확인 필요",
+        "ROLLOVER_INFERRED": "감사인 추정",
+    }
+    parts = [
+        f"{label} {counts[status]}건"
+        for status, label in watched.items()
+        if counts.get(status)
+    ]
+    return " · ".join(parts) if parts else None

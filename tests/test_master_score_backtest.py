@@ -113,6 +113,22 @@ def test_format_calibration_report_is_telegram_card_style():
     assert "ticker |" not in text
 
 
+def test_format_calibration_report_summarizes_independence_statuses():
+    outcomes = [
+        _outcome(score=92, returns={"5d": 4.0, "10d": 8.0, "20d": 12.0}, independence_status="CLEAR_CONFIRMED"),
+        _outcome(score=86, returns={"5d": -3.0, "10d": -8.0, "20d": -12.0}, independence_status="BLOCKED_CONFIRMED"),
+        _outcome(score=74, returns={"5d": 1.0, "10d": 2.0, "20d": 3.0}, independence_status="MANUAL_VERIFY"),
+    ]
+
+    summary = summarize_outcomes(outcomes)
+    text = format_calibration_report(outcomes)
+
+    assert summary.independence_status_counts["BLOCKED_CONFIRMED"] == 1
+    assert summary.independence_status_counts["MANUAL_VERIFY"] == 1
+    assert "독립성표본: 차단 확정 1건 · 원천 확인 필요 1건" in text
+    assert "해석: 차단/보류 신호는 수익률과 별개로 매입 후보에서 제외 또는 원천 확인 대상입니다." in text
+
+
 def _event_row(*, payload: dict, received_at: int) -> SignalEventRow:
     return SignalEventRow(
         ticker=payload["ticker"],
@@ -139,6 +155,7 @@ def _outcome(
     returns: dict[str, float | None],
     rating: str | None = "ENTRY",
     status: str = "ok",
+    independence_status: str = "CLEAR",
 ) -> SignalOutcome:
     from signals.backtest import SignalOutcome
 
@@ -152,4 +169,5 @@ def _outcome(
         entry_price=100.0,
         returns=returns,
         status=status,
+        independence_status=independence_status,
     )

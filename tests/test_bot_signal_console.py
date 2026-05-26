@@ -756,6 +756,7 @@ def test_render_backtest_report_supports_us_events_with_injected_provider(tmp_pa
 
     assert "현재 가격 히스토리 provider는 국장" not in text
     assert "샘플: 1건 · 유효: 1건" in text
+    assert "독립성표본: 원천 확인 필요 1건" in text
 
 
 def test_render_leading_discovery_combines_supply_and_technical_scores(monkeypatch):
