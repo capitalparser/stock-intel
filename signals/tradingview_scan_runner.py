@@ -604,7 +604,7 @@ def _empty_recommendation_diagnostics(
         lines.append("해석: 진입 이후 청산/손절/이탈 라벨이 확인되어 추천 후보에서 제외됐습니다.")
     elif scanned > 0:
         lines.append("해석: 차트는 읽었지만 현재 활성 매수 라벨이 없습니다.")
-    lines.append("다음 확인: /추천 us 10 동기화 또는 /추천 kr 20 동기화")
+    lines.append("다음 확인: /추천 kr 20 동기화 · /추천 us 10 동기화 · /추천 jp 10 동기화")
     return lines
 
 

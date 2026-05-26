@@ -989,7 +989,7 @@ def test_empty_recommendation_report_explains_errors_and_exclusions():
     assert "오류 심볼: AMEX:BMNR" in text
     assert "쿨다운 제외: NASDAQ:MSFT" in text
     assert "제외 사유: 💸 최종 청산 1건" in text
-    assert "다음 확인: /추천 us 10 동기화" in text
+    assert "다음 확인: /추천 kr 20 동기화 · /추천 us 10 동기화 · /추천 jp 10 동기화" in text
     assert "\n오류: AMEX:BMNR" not in text
 
 

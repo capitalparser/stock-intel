@@ -134,6 +134,7 @@ HELP_TEXT = (
     "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/추천 kr 50 — 시세 반영 전 우선 검토 후보\n"
+    "/추천 us 10 / /추천 jp 10 — 미장·일장 후보(원천 확인 전 보류)\n"
     "/추천쿨다운 — 추천 스캔 오류 심볼 쿨다운 조회\n"
     "/추천캐시 — 추천 TradingView 스캔 캐시 조회\n"
     "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
@@ -1019,10 +1020,10 @@ def parse_backtest_args(args: list[str]) -> dict:
         lowered = arg.strip().lower()
         if not lowered:
             continue
-        if lowered in {"kr", "국장", "korea"}:
+        if lowered in {"kr", "국장", "한국", "korea"}:
             market = "KR"
             continue
-        if lowered in {"us", "미장", "usa"}:
+        if lowered in {"us", "미장", "미국", "usa"}:
             market = "US"
             continue
         if lowered in {"jp", "일본", "japan"}:
@@ -1107,10 +1108,10 @@ def parse_tradingview_scan_args(args: list[str]) -> dict:
         if lowered in {"sync", "동기화", "현재"}:
             sync = True
             continue
-        if lowered in {"kr", "국장", "korea"}:
+        if lowered in {"kr", "국장", "한국", "korea"}:
             market = "KR"
             continue
-        if lowered in {"us", "미장", "usa"}:
+        if lowered in {"us", "미장", "미국", "usa"}:
             market = "US"
             continue
         if lowered in {"jp", "일본", "japan"}:
