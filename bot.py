@@ -48,6 +48,12 @@ from signals.console import (
     parse_console_args,
     parse_console_callback,
 )
+from signals.backtest import (
+    PriceHistoryProvider,
+    PricePoint,
+    audit_signal_outcomes,
+    format_calibration_report,
+)
 from signals.independence import format_independence_alert, decide_independence
 from signals.kr_watch_candidates import KR_CANDIDATE_SEEDS
 from signals.lazy_alpha_transitions import (
@@ -61,6 +67,7 @@ from signals.leading_discovery import (
     score_leading_candidate,
 )
 from signals.market import Market
+from signals.price_history import PykrxPriceHistoryProvider
 from signals.tradingview_direct import TradingViewTableSnapshot, evaluate_lazy_alpha_state, interpret_lazy_alpha_flow
 from signals.storage import SignalStore
 from signals.telegram import send_telegram_message
@@ -118,6 +125,7 @@ HELP_TEXT = (
     "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
+    "/검증 kr 100 — 저장된 BUY 웹훅 시그널 사후검증\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
     "/국장스캔 — TradingView 국장 watchlist 기술점수 스캔\n"
     "/스캔 us 5 — 관심 universe 중 미국 5종목 직접 스캔\n"
@@ -134,6 +142,7 @@ _SIGNAL_CONSOLE_TEXT_SHORTCUTS = {"시그널", "신호", "signals", "signal"}
 _TRADINGVIEW_SCAN_TEXT_SHORTCUTS = {"스캔", "현재신호", "국장스캔", "tvscan", "scan", "krscan"}
 _LAZY_ALPHA_TRANSITION_TEXT_SHORTCUTS = {"변화", "상태변화", "전환", "알림", "changes", "transition", "transitions"}
 _LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", "discovery"}
+_BACKTEST_TEXT_SHORTCUTS = {"검증", "백테스트", "backtest", "audit"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -654,6 +663,47 @@ def render_leading_discovery(args: list[str]) -> str:
     )
 
 
+def render_backtest_report(
+    args: list[str],
+    *,
+    price_provider: PriceHistoryProvider | None = None,
+) -> str:
+    options = parse_backtest_args(args)
+    if options["market"] != "KR":
+        return "🧪 Master Score 사후검증\n현재 가격 히스토리 provider는 국장(KR)만 지원합니다."
+    rows = [
+        row
+        for row in _signal_store().events_for_audit(limit=options["limit"], action="BUY")
+        if row.market == "KR"
+    ]
+    outcomes = audit_signal_outcomes(
+        rows,
+        price_provider=price_provider or PykrxPriceHistoryProvider(),
+    )
+    return format_calibration_report(outcomes)
+
+
+def parse_backtest_args(args: list[str]) -> dict:
+    market = "KR"
+    limit = 50
+    for arg in args:
+        lowered = arg.strip().lower()
+        if not lowered:
+            continue
+        if lowered in {"kr", "국장", "korea"}:
+            market = "KR"
+            continue
+        if lowered in {"us", "미장", "usa"}:
+            market = "US"
+            continue
+        if lowered in {"jp", "일본", "japan"}:
+            market = "JP"
+            continue
+        if lowered.isdigit():
+            limit = max(1, min(int(lowered), 300))
+    return {"market": market, "limit": limit}
+
+
 def parse_leading_discovery_args(args: list[str]) -> dict:
     limit = 25
     output_limit = 12
@@ -810,6 +860,14 @@ def parse_leading_discovery_text(text: str) -> list[str] | None:
     command, args = _strip_korean_slash_command(text)
     normalized = command.strip().lower()
     if normalized in _LEADING_DISCOVERY_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
+def parse_backtest_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _BACKTEST_TEXT_SHORTCUTS:
         return args
     return None
 
@@ -994,6 +1052,22 @@ async def handle_leading_discovery_command(update: Update, context) -> None:
     await loading.edit_text(_truncate_telegram_text(text))
 
 
+async def handle_backtest_command(update: Update, context) -> None:
+    """/검증 텍스트 트리거. 저장된 BUY 웹훅 시그널의 이후 가격 흐름을 점수대별로 요약한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    loading = await update.message.reply_text("🧪 저장된 BUY 시그널 사후검증 중...")
+    try:
+        text = await asyncio.to_thread(render_backtest_report, args or ["kr"])
+    except Exception as exc:
+        logger.exception("signal backtest failed")
+        await loading.edit_text(f"⚠️ 사후검증 실패: {exc!s}")
+        return
+    await loading.edit_text(_truncate_telegram_text(text))
+
+
 async def handle_korean_stock_command(update: Update, context) -> None:
     """/종목 텍스트 트리거. 종목 리서치와 현재 TradingView Lazy Alpha 판단을 함께 보여준다."""
     if not await check_allowed(update):
@@ -1128,6 +1202,17 @@ async def handle_text(update: Update, context) -> None:
             return
         await loading.edit_text(_truncate_telegram_text(text))
         return
+    backtest_args = parse_backtest_text(query)
+    if backtest_args is not None:
+        loading = await update.message.reply_text("🧪 저장된 BUY 시그널 사후검증 중...")
+        try:
+            text = await asyncio.to_thread(render_backtest_report, backtest_args or ["kr"])
+        except Exception as exc:
+            logger.exception("signal backtest failed")
+            await loading.edit_text(f"⚠️ 사후검증 실패: {exc!s}")
+            return
+        await loading.edit_text(_truncate_telegram_text(text))
+        return
     await _lookup_and_reply(update, query)
 
 
@@ -1197,6 +1282,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["changes", "transition", "transitions"], handle_lazy_alpha_transition_command))
+    tg_app.add_handler(CommandHandler(["backtest", "audit"], handle_backtest_command))
     tg_app.add_handler(CommandHandler(["stock", "s", "check"], handle_lookup_command))
     tg_app.add_handler(
         MessageHandler(
@@ -1226,6 +1312,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:선행|발굴)(?:@\S+)?(?:\s+.*)?$"),
             handle_leading_discovery_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:검증|백테스트)(?:@\S+)?(?:\s+.*)?$"),
+            handle_backtest_command,
         )
     )
     tg_app.add_handler(

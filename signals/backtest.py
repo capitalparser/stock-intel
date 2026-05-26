@@ -12,6 +12,7 @@ from signals.market import ticker_for_lookup
 from signals.storage import SignalEventRow
 
 _KST = ZoneInfo("Asia/Seoul")
+_BUCKET_ORDER = ("90+", "80-89", "70-79", "<70")
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,24 @@ class SignalOutcome:
     returns: dict[str, float | None]
     status: str
     warning: str | None = None
+
+
+@dataclass(frozen=True)
+class OutcomeBucketSummary:
+    count: int
+    avg_5d: float | None
+    avg_10d: float | None
+    avg_20d: float | None
+    win_rate_20d: int
+
+
+@dataclass(frozen=True)
+class OutcomeCalibrationSummary:
+    sample_count: int
+    valid_count: int
+    buckets: dict[str, OutcomeBucketSummary]
+    failure_modes: dict[str, int]
+    status_counts: dict[str, int]
 
 
 def audit_signal_outcomes(
@@ -102,6 +121,75 @@ def audit_signal_outcomes(
     return outcomes
 
 
+def summarize_outcomes(outcomes: list[SignalOutcome]) -> OutcomeCalibrationSummary:
+    status_counts: dict[str, int] = {}
+    bucket_items: dict[str, list[SignalOutcome]] = {bucket: [] for bucket in _BUCKET_ORDER}
+    failure_modes: dict[str, int] = {}
+
+    for outcome in outcomes:
+        status_counts[outcome.status] = status_counts.get(outcome.status, 0) + 1
+        if outcome.status != "ok":
+            continue
+        bucket_items[_score_bucket(outcome.master_score)].append(outcome)
+        failure = _failure_mode(outcome)
+        if failure:
+            failure_modes[failure] = failure_modes.get(failure, 0) + 1
+
+    buckets = {
+        bucket: _summarize_bucket(items)
+        for bucket, items in bucket_items.items()
+        if items
+    }
+    return OutcomeCalibrationSummary(
+        sample_count=len(outcomes),
+        valid_count=sum(1 for item in outcomes if item.status == "ok"),
+        buckets=buckets,
+        failure_modes=failure_modes,
+        status_counts=status_counts,
+    )
+
+
+def format_calibration_report(outcomes: list[SignalOutcome]) -> str:
+    summary = summarize_outcomes(outcomes)
+    lines = [
+        "🧪 Master Score 사후검증",
+        f"샘플: {summary.sample_count}건 · 유효: {summary.valid_count}건",
+        "",
+    ]
+    if not outcomes:
+        lines.append("검증할 BUY 시그널이 없습니다.")
+        return "\n".join(lines)
+    if summary.valid_count == 0:
+        lines.append("아직 유효한 미래 가격 데이터가 없습니다.")
+    else:
+        lines.append("점수대별 20거래일 성과")
+        for bucket in _BUCKET_ORDER:
+            item = summary.buckets.get(bucket)
+            if not item:
+                continue
+            lines.append(
+                f"{bucket}: {item.count}건 · 20d 승률 {item.win_rate_20d}% · 평균 {_fmt_pct(item.avg_20d)}"
+            )
+
+    if summary.failure_modes:
+        lines.append("")
+        lines.append("실패유형: " + " · ".join(
+            f"{name} {count}건" for name, count in summary.failure_modes.items()
+        ))
+
+    non_ok = {
+        status: count
+        for status, count in summary.status_counts.items()
+        if status != "ok"
+    }
+    if non_ok:
+        lines.append("")
+        lines.append("데이터상태: " + " · ".join(
+            f"{status} {count}건" for status, count in non_ok.items()
+        ))
+    return "\n".join(lines)
+
+
 def format_outcome_report(outcomes: list[SignalOutcome]) -> str:
     lines = ["Master Score 사후검증", f"샘플: {len(outcomes)}건", ""]
     if not outcomes:
@@ -160,3 +248,56 @@ def _fmt_pct(value: float | None) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:.2f}%"
 
+
+def _score_bucket(score: int | None) -> str:
+    if score is None:
+        return "<70"
+    if score >= 90:
+        return "90+"
+    if score >= 80:
+        return "80-89"
+    if score >= 70:
+        return "70-79"
+    return "<70"
+
+
+def _summarize_bucket(outcomes: list[SignalOutcome]) -> OutcomeBucketSummary:
+    returns_5d = [item.returns.get("5d") for item in outcomes]
+    returns_10d = [item.returns.get("10d") for item in outcomes]
+    returns_20d = [item.returns.get("20d") for item in outcomes]
+    valid_20d = [value for value in returns_20d if value is not None]
+    win_rate_20d = 0
+    if valid_20d:
+        win_rate_20d = round(sum(1 for value in valid_20d if value > 0) / len(valid_20d) * 100)
+    return OutcomeBucketSummary(
+        count=len(outcomes),
+        avg_5d=_avg(returns_5d),
+        avg_10d=_avg(returns_10d),
+        avg_20d=_avg(returns_20d),
+        win_rate_20d=win_rate_20d,
+    )
+
+
+def _avg(values: list[float | None]) -> float | None:
+    valid = [value for value in values if value is not None]
+    if not valid:
+        return None
+    return round(sum(valid) / len(valid), 2)
+
+
+def _failure_mode(outcome: SignalOutcome) -> str | None:
+    return_5d = outcome.returns.get("5d")
+    return_10d = outcome.returns.get("10d")
+    return_20d = outcome.returns.get("20d")
+    if return_20d is None or return_20d > -5:
+        return None
+    if return_5d is not None and return_5d <= -7:
+        return "외생/갭하락 의심 또는 즉시 실패"
+    if (
+        return_5d is not None
+        and return_10d is not None
+        and return_5d < 0
+        and return_10d < 0
+    ):
+        return "페이크/휩쏘 돌파"
+    return "미분류: 뉴스/섹터/실적 확인 필요"

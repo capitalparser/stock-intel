@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -7,7 +9,9 @@ from signals.backtest import (
     PriceHistoryProvider,
     PricePoint,
     audit_signal_outcomes,
+    format_calibration_report,
     format_outcome_report,
+    summarize_outcomes,
 )
 from signals.storage import SignalEventRow
 
@@ -73,6 +77,42 @@ def test_format_outcome_report_handles_empty_sample():
     assert "검증할 BUY 시그널이 없습니다." in text
 
 
+def test_summarize_outcomes_groups_score_buckets_and_failure_modes():
+    outcomes = [
+        _outcome(score=92, returns={"5d": 4.0, "10d": 8.0, "20d": 12.0}),
+        _outcome(score=86, returns={"5d": -3.0, "10d": -8.0, "20d": -12.0}),
+        _outcome(score=64, returns={"5d": -1.0, "10d": 2.0, "20d": 4.0}),
+        _outcome(score=None, returns={"5d": None, "10d": None, "20d": None}, status="price_error"),
+    ]
+
+    summary = summarize_outcomes(outcomes)
+
+    assert summary.sample_count == 4
+    assert summary.valid_count == 3
+    assert summary.buckets["90+"].count == 1
+    assert summary.buckets["80-89"].win_rate_20d == 0
+    assert summary.buckets["80-89"].avg_20d == -12.0
+    assert summary.failure_modes["페이크/휩쏘 돌파"] == 1
+    assert summary.status_counts["price_error"] == 1
+
+
+def test_format_calibration_report_is_telegram_card_style():
+    outcomes = [
+        _outcome(score=92, rating="LEADER", returns={"5d": 4.0, "10d": 8.0, "20d": 12.0}),
+        _outcome(score=86, rating="ENTRY", returns={"5d": -3.0, "10d": -8.0, "20d": -12.0}),
+        _outcome(score=64, rating="WATCH", returns={"5d": -1.0, "10d": 2.0, "20d": 4.0}),
+    ]
+
+    text = format_calibration_report(outcomes)
+
+    assert "🧪 Master Score 사후검증" in text
+    assert "샘플: 3건 · 유효: 3건" in text
+    assert "90+: 1건 · 20d 승률 100% · 평균 +12.00%" in text
+    assert "80-89: 1건 · 20d 승률 0% · 평균 -12.00%" in text
+    assert "실패유형: 페이크/휩쏘 돌파 1건" in text
+    assert "ticker |" not in text
+
+
 def _event_row(*, payload: dict, received_at: int) -> SignalEventRow:
     return SignalEventRow(
         ticker=payload["ticker"],
@@ -91,3 +131,25 @@ def _event_row(*, payload: dict, received_at: int) -> SignalEventRow:
 
 def _ts(value: str) -> int:
     return int(datetime.fromisoformat(value).astimezone(ZoneInfo("Asia/Seoul")).timestamp())
+
+
+def _outcome(
+    *,
+    score: int | None,
+    returns: dict[str, float | None],
+    rating: str | None = "ENTRY",
+    status: str = "ok",
+) -> SignalOutcome:
+    from signals.backtest import SignalOutcome
+
+    return SignalOutcome(
+        ticker="KRX:000000",
+        market="KR",
+        signal_date="2026-01-02",
+        action="BUY",
+        master_score=score,
+        rating=rating,
+        entry_price=100.0,
+        returns=returns,
+        status=status,
+    )
