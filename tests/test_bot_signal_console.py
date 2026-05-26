@@ -493,6 +493,9 @@ def test_render_recommendation_cooldown_report_lists_active_symbols(monkeypatch,
     assert "남은 50분" in text
     assert "symbol not found" in text
     assert "NASDAQ:OLD" not in text
+    state = json.loads(path.read_text(encoding="utf-8"))
+    assert "AMEX:BMNR" in state
+    assert "NASDAQ:OLD" not in state
 
 
 def test_render_recommendation_cooldown_clear_resets_state(monkeypatch, tmp_path):

@@ -664,12 +664,17 @@ def render_recommendation_cooldown(args: list[str]) -> str:
     ttl = int(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", str(6 * 3600)))
     now = int(time.time())
     rows = []
-    for symbol, payload in _read_recommendation_error_state().items():
+    active_state = {}
+    state = _read_recommendation_error_state()
+    for symbol, payload in state.items():
         failed_at = int(payload.get("last_failed_at", 0))
         remaining = ttl - (now - failed_at)
         if remaining <= 0:
             continue
+        active_state[symbol] = payload
         rows.append((symbol, remaining, str(payload.get("error") or "-")))
+    if len(active_state) != len(state):
+        _write_recommendation_error_state(active_state)
     rows.sort(key=lambda item: (item[1], item[0]))
 
     lines = [
