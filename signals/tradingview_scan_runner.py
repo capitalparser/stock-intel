@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from signals.independence import decide_independence
+from signals.leading_discovery import SupplyScore, score_supply_accumulation
 from signals.market import Market, ticker_for_lookup
 from signals.tradingview_direct import (
     TradingViewExcludedSignal,
@@ -46,6 +47,7 @@ class TradingViewScanResult:
 @dataclass(frozen=True)
 class KrSignalEnrichment:
     supply: str
+    supply_score: SupplyScore
     fundamental: str
     auditor: str
 
@@ -281,8 +283,12 @@ def format_telegram_outcome_cards(
         ]
 
     cache = ticker_cache if ticker_cache is not None else _load_ticker_cache_safely()
-    lines = [f"활성 매수 후보: {len(outcomes)}건"]
-    for index, item in enumerate(outcomes, start=1):
+    ordered_outcomes = sorted(
+        outcomes,
+        key=lambda row: _card_sort_key(row, enrichments or {}),
+    )
+    lines = [f"활성 매수 후보: {len(ordered_outcomes)}건"]
+    for index, item in enumerate(ordered_outcomes, start=1):
         priority_risks = classify_priority_risks(returns=item.returns, context=item.context)
         combined_risks = [*item.risk_flags, *priority_risks]
         risk = "없음" if not combined_risks else ", ".join(combined_risks)
@@ -299,10 +305,15 @@ def format_telegram_outcome_cards(
             table_score=table.aux_score if table else None,
             penalty=adjusted_penalty,
         )
+        enrichment = (enrichments or {}).get(item.symbol)
+        score_label = f"기술점수 {score}점"
+        if enrichment:
+            composite_score = _composite_signal_score(score, enrichment.supply_score.score)
+            score_label = f"종합점수 {composite_score}점 · 기술점수 {score}점"
         lines.extend(
             [
                 "",
-                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)} · 기술점수 {score}점",
+                f"{index}. {symbol_display_name(item.symbol, ticker_cache=cache)} · {score_label}",
                 f"최종판정: {decision.verdict} · {decision.reason}",
                 f"행동: {decision.action}",
                 f"판정: {status}",
@@ -311,20 +322,39 @@ def format_telegram_outcome_cards(
                 f"감점 사유: {risk}",
             ]
         )
-        enrichment = (enrichments or {}).get(item.symbol)
         if enrichment:
             lines.extend(
                 [
                     f"감사인: {enrichment.auditor}",
                     f"수급: {enrichment.supply}",
+                    f"수급점수: {enrichment.supply_score.score}/35 · {enrichment.supply_score.state}",
                     f"실적/밸류: {enrichment.fundamental}",
                 ]
             )
+            if enrichment.supply_score.evidence:
+                lines.append("수급근거: " + " · ".join(enrichment.supply_score.evidence[:3]))
+            if enrichment.supply_score.risks:
+                lines.append("수급리스크: " + " · ".join(enrichment.supply_score.risks[:2]))
         if table:
             lines.extend(format_lazy_alpha_table_card_lines(table))
         if item.failure_class:
             lines.append(f"실패분류: {item.failure_class}")
     return lines
+
+
+def _card_sort_key(
+    item: TradingViewLabelOutcome,
+    enrichments: dict[str, KrSignalEnrichment],
+) -> tuple[int, int, str]:
+    technical_score = max(0, 100 - adjusted_priority_penalty(item))
+    enrichment = enrichments.get(item.symbol)
+    if enrichment:
+        return (-_composite_signal_score(technical_score, enrichment.supply_score.score), adjusted_priority_penalty(item), item.symbol)
+    return (-technical_score, adjusted_priority_penalty(item), item.symbol)
+
+
+def _composite_signal_score(technical_score: int, supply_score: int) -> int:
+    return max(0, min(100, round(technical_score * 0.75 + (supply_score / 35) * 25)))
 
 
 def format_lazy_alpha_table_card_lines(table: TradingViewTableSnapshot) -> list[str]:
@@ -431,6 +461,7 @@ def build_kr_signal_enrichments(
         decision = decide_independence(Market("KR", "한국"), audit)
         enrichments[item.symbol] = KrSignalEnrichment(
             supply=_format_supply_summary(supply),
+            supply_score=score_supply_accumulation(supply),
             fundamental=_format_fundamental_summary(fundamental),
             auditor=_format_auditor_summary(decision.status, decision.auditor, decision.reason),
         )

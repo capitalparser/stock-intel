@@ -26,6 +26,14 @@ class LeadingCandidate:
     auditor: str
 
 
+@dataclass(frozen=True)
+class SupplyScore:
+    score: int
+    state: str
+    evidence: list[str]
+    risks: list[str]
+
+
 def score_leading_candidate(
     *,
     symbol: str,
@@ -35,7 +43,10 @@ def score_leading_candidate(
     fundamental: dict,
     auditor: str,
 ) -> LeadingCandidate:
-    supply_score, supply_evidence, supply_risks = _score_supply(supply)
+    supply_result = score_supply_accumulation(supply)
+    supply_score = supply_result.score
+    supply_evidence = supply_result.evidence
+    supply_risks = supply_result.risks
     setup_score, setup_evidence, setup_risks = _score_setup(technical)
     fundamental_score, fundamental_evidence, fundamental_risks = _score_fundamental(fundamental)
     risk_penalty, risk_notes = _risk_penalty(technical, supply)
@@ -64,6 +75,19 @@ def score_leading_candidate(
         next_trigger=_next_trigger(technical, risks),
         auditor=auditor,
     )
+
+
+def score_supply_accumulation(supply: dict) -> SupplyScore:
+    score, evidence, risks = _score_supply(supply)
+    if score >= 30 and any("동반 매집" in item for item in evidence):
+        state = "동반 매집"
+    elif score >= 22:
+        state = "누적 매집"
+    elif score >= 12:
+        state = "부분 매집"
+    else:
+        state = "수급 약함"
+    return SupplyScore(score=score, state=state, evidence=evidence, risks=risks)
 
 
 def format_leading_report(

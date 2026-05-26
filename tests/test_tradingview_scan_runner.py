@@ -349,6 +349,69 @@ def test_telegram_cards_include_korean_company_name_for_krx_symbol():
     assert "1. KRX:103590 · 일진전기 · 기술점수 80점" in text
 
 
+def test_telegram_cards_rank_kr_candidates_by_composite_supply_score():
+    strong_supply = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=87500,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=10,
+    )
+    weak_supply = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=9050,
+        returns={},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+    enrichments = build_kr_signal_enrichments(
+        [strong_supply, weak_supply],
+        supply_lookup=lambda ticker: {
+            "103590": {
+                "institution": {"today": 200_000_000, "5d": 1_200_000_000, "20d": 4_800_000_000},
+                "foreigner": {"today": 100_000_000, "5d": 800_000_000, "20d": 2_200_000_000},
+                "daily": [{"institution": 1, "foreigner": 1}] * 5,
+            },
+            "300080": {
+                "institution": {"today": -100_000_000, "5d": -800_000_000, "20d": -2_400_000_000},
+                "foreigner": {"today": -200_000_000, "5d": -700_000_000, "20d": -1_900_000_000},
+                "daily": [],
+            },
+        }[ticker],
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    text = "\n".join(
+        format_telegram_outcome_cards(
+            [weak_supply, strong_supply],
+            enrichments=enrichments,
+            ticker_cache=[
+                {"code": "103590", "name": "일진전기", "market": "KOSPI"},
+                {"code": "300080", "name": "플리토", "market": "KOSDAQ"},
+            ],
+        )
+    )
+
+    assert text.index("1. KRX:103590 · 일진전기 · 종합점수 92점 · 기술점수 90점") < text.index(
+        "2. KRX:300080 · 플리토 · 종합점수 75점 · 기술점수 100점"
+    )
+
+
 def test_priority_sort_key_downgrades_large_post_signal_moves():
     fresh = TradingViewLabelOutcome(
         symbol="KRX:012510",
@@ -428,3 +491,75 @@ def test_kr_enrichment_adds_supply_fundamental_and_auditor_to_cards():
     assert text.index("감사인:") < text.index("수급:")
     assert "수급: 기관 오늘 +1억 / 5일 -3억 · 외국인 오늘 0억 / 5일 +9억" in text
     assert "실적/밸류: 매출 2025 13,000억 · 영업익 +1,500억 · PER 18.20x · PBR 2.10x" in text
+
+
+def test_kr_enrichment_scores_supply_accumulation_for_scan_cards():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:103590",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=87500,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    enrichments = build_kr_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": 200_000_000, "5d": 1_200_000_000, "20d": 4_800_000_000},
+            "foreigner": {"today": 100_000_000, "5d": 800_000_000, "20d": 2_200_000_000},
+            "daily": [
+                {"institution": 200_000_000, "foreigner": 100_000_000},
+                {"institution": 150_000_000, "foreigner": 50_000_000},
+                {"institution": 120_000_000, "foreigner": 80_000_000},
+                {"institution": 90_000_000, "foreigner": 20_000_000},
+                {"institution": -10_000_000, "foreigner": 30_000_000},
+            ],
+        },
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    text = "\n".join(format_telegram_outcome_cards([outcome], enrichments=enrichments))
+
+    assert "수급점수: 35/35 · 동반 매집" in text
+    assert "수급근거: 기관 20일 순매수 +48억 · 기관 5일 순매수 +12억 · 외국인 20일 순매수 +22억" in text
+
+
+def test_kr_enrichment_marks_distribution_supply_risk_for_scan_cards():
+    outcome = TradingViewLabelOutcome(
+        symbol="KRX:300080",
+        market="KR",
+        signal_date="2026-05-26",
+        first_signal_date="2026-05-26",
+        last_signal_date="2026-05-26",
+        duplicate_count=1,
+        label="💰 진입",
+        entry_price=9050,
+        returns={"5d": None, "10d": None, "20d": None},
+        context={},
+        risk_flags=[],
+        score_penalty_hint=0,
+    )
+
+    enrichments = build_kr_signal_enrichments(
+        [outcome],
+        supply_lookup=lambda ticker: {
+            "institution": {"today": -100_000_000, "5d": -800_000_000, "20d": -2_400_000_000},
+            "foreigner": {"today": -200_000_000, "5d": -700_000_000, "20d": -1_900_000_000},
+            "daily": [],
+        },
+        fundamental_lookup=lambda ticker: {},
+        audit_lookup=lambda ticker: {},
+    )
+
+    text = "\n".join(format_telegram_outcome_cards([outcome], enrichments=enrichments))
+
+    assert "수급점수: 0/35 · 수급 약함" in text
+    assert "수급리스크: 기관+외국인 20일 동반 순매도" in text
