@@ -464,6 +464,48 @@ def test_parse_recommendation_text_supports_korean_command():
     assert bot.parse_recommendation_text("삼성전자") is None
 
 
+def test_parse_recommendation_cooldown_text_supports_korean_command():
+    assert bot.parse_recommendation_cooldown_text("/추천쿨다운") == []
+    assert bot.parse_recommendation_cooldown_text("추천쿨다운 초기화") == ["초기화"]
+    assert bot.parse_recommendation_cooldown_text("추천 us") is None
+
+
+def test_render_recommendation_cooldown_report_lists_active_symbols(monkeypatch, tmp_path):
+    path = tmp_path / "cooldown.json"
+    path.write_text(
+        json.dumps(
+            {
+                "AMEX:BMNR": {"last_failed_at": 1_000, "error": "symbol not found"},
+                "NASDAQ:OLD": {"last_failed_at": -3_000, "error": "old"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(path))
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", "3600")
+    monkeypatch.setattr(bot.time, "time", lambda: 1_600)
+
+    text = bot.render_recommendation_cooldown([])
+
+    assert "🧊 추천 오류 심볼 쿨다운" in text
+    assert "활성: 1건" in text
+    assert "AMEX:BMNR" in text
+    assert "남은 50분" in text
+    assert "symbol not found" in text
+    assert "NASDAQ:OLD" not in text
+
+
+def test_render_recommendation_cooldown_clear_resets_state(monkeypatch, tmp_path):
+    path = tmp_path / "cooldown.json"
+    path.write_text(json.dumps({"AMEX:BMNR": {"last_failed_at": 1_000, "error": "bad"}}), encoding="utf-8")
+    monkeypatch.setenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", str(path))
+
+    text = bot.render_recommendation_cooldown(["초기화"])
+
+    assert "초기화 완료" in text
+    assert json.loads(path.read_text(encoding="utf-8")) == {}
+
+
 def test_render_backtest_report_uses_saved_buy_events(tmp_path, monkeypatch):
     db_path = tmp_path / "signals.db"
     store = SignalStore(db_path)

@@ -133,6 +133,7 @@ HELP_TEXT = (
     "/선행 kr — 수급+기술 전조 기반 국장 선행 후보\n"
     "/진입 — 현재 진입/매수 후보만 점수순 스캔\n"
     "/추천 kr 50 — 시세 반영 전 우선 검토 후보\n"
+    "/추천쿨다운 — 추천 스캔 오류 심볼 쿨다운 조회\n"
     "/변화 — 이전 스캔 대비 Lazy Alpha 상태 전환만 확인\n"
     "/검증 kr 100 — 저장된 BUY 웹훅 시그널 사후검증\n"
     "/스캔 — TradingView 차트 직접 스캔(웹훅 미수신분 확인)\n"
@@ -153,6 +154,7 @@ _LAZY_ALPHA_TRANSITION_TEXT_SHORTCUTS = {"변화", "상태변화", "전환", "�
 _LEADING_DISCOVERY_TEXT_SHORTCUTS = {"선행", "발굴", "leading", "discover", "discovery"}
 _BACKTEST_TEXT_SHORTCUTS = {"검증", "백테스트", "backtest", "audit"}
 _RECOMMENDATION_TEXT_SHORTCUTS = {"추천", "후보", "추천후보", "recommend", "recommendations", "pick", "picks"}
+_RECOMMENDATION_COOLDOWN_TEXT_SHORTCUTS = {"추천쿨다운", "쿨다운", "recommendcooldown", "cooldown"}
 
 # ---------------------------------------------------------------------------
 # 스케줄러
@@ -643,6 +645,36 @@ def render_signal_recommendations(args: list[str]) -> str:
     )
 
 
+def render_recommendation_cooldown(args: list[str]) -> str:
+    if any(arg.strip().lower() in {"초기화", "해제", "삭제", "clear", "reset"} for arg in args):
+        _write_recommendation_error_state({})
+        return "🧊 추천 오류 심볼 쿨다운\n초기화 완료"
+
+    ttl = int(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_SECONDS", str(6 * 3600)))
+    now = int(time.time())
+    rows = []
+    for symbol, payload in _read_recommendation_error_state().items():
+        failed_at = int(payload.get("last_failed_at", 0))
+        remaining = ttl - (now - failed_at)
+        if remaining <= 0:
+            continue
+        rows.append((symbol, remaining, str(payload.get("error") or "-")))
+    rows.sort(key=lambda item: (item[1], item[0]))
+
+    lines = [
+        "🧊 추천 오류 심볼 쿨다운",
+        f"활성: {len(rows)}건 · TTL {ttl // 3600 if ttl >= 3600 else ttl // 60}{'시간' if ttl >= 3600 else '분'}",
+    ]
+    if not rows:
+        lines.extend(["", "현재 쿨다운 중인 오류 심볼이 없습니다."])
+        return "\n".join(lines)
+    lines.append("")
+    for index, (symbol, remaining, error) in enumerate(rows[:20], start=1):
+        lines.append(f"{index}. {symbol} · 남은 {_fmt_duration_ko(remaining)} · {error}")
+    lines.extend(["", "초기화: /추천쿨다운 초기화"])
+    return "\n".join(lines)
+
+
 def _supplement_recommendation_scan(options: dict, result: TradingViewScanResult) -> TradingViewScanResult:
     market = options.get("market")
     requested = list(options.get("symbols") or [])
@@ -775,6 +807,16 @@ def _write_recommendation_error_state(state: dict[str, dict]) -> None:
     path = Path(os.getenv("RECOMMENDATION_ERROR_COOLDOWN_PATH", "./state/recommendation_symbol_errors.json"))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _fmt_duration_ko(seconds: int) -> str:
+    minutes = max(1, round(seconds / 60))
+    if minutes < 60:
+        return f"{minutes}분"
+    hours, rest_minutes = divmod(minutes, 60)
+    if rest_minutes == 0:
+        return f"{hours}시간"
+    return f"{hours}시간 {rest_minutes}분"
 
 
 def _scan_tradingview_symbols_batched(
@@ -1115,6 +1157,14 @@ def parse_recommendation_text(text: str) -> list[str] | None:
     return None
 
 
+def parse_recommendation_cooldown_text(text: str) -> list[str] | None:
+    command, args = _strip_korean_slash_command(text)
+    normalized = command.strip().lower()
+    if normalized in _RECOMMENDATION_COOLDOWN_TEXT_SHORTCUTS:
+        return args
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 핸들러
 # ---------------------------------------------------------------------------
@@ -1295,6 +1345,16 @@ async def handle_recommendation_command(update: Update, context) -> None:
     await loading.edit_text(_truncate_telegram_text(text))
 
 
+async def handle_recommendation_cooldown_command(update: Update, context) -> None:
+    """/추천쿨다운 텍스트 트리거. 추천 스캔 오류 심볼 쿨다운을 조회/초기화한다."""
+    if not await check_allowed(update):
+        return
+
+    _command, args = _strip_korean_slash_command(update.message.text)
+    text = await asyncio.to_thread(render_recommendation_cooldown, args)
+    await update.message.reply_text(_truncate_telegram_text(text))
+
+
 async def handle_leading_discovery_command(update: Update, context) -> None:
     """/선행 텍스트 트리거. 수급+기술 전조로 국장 선행 후보를 압축한다."""
     if not await check_allowed(update):
@@ -1461,6 +1521,11 @@ async def handle_text(update: Update, context) -> None:
             return
         await loading.edit_text(_truncate_telegram_text(text))
         return
+    cooldown_args = parse_recommendation_cooldown_text(query)
+    if cooldown_args is not None:
+        text = await asyncio.to_thread(render_recommendation_cooldown, cooldown_args)
+        await update.message.reply_text(_truncate_telegram_text(text))
+        return
     leading_args = parse_leading_discovery_text(query)
     if leading_args is not None:
         loading = await update.message.reply_text("🔎 국장 선행 후보 스캔 중... 수급과 차트 전조를 확인합니다.")
@@ -1551,6 +1616,7 @@ async def _run() -> None:
     tg_app.add_handler(CommandHandler(["leading", "discover"], handle_leading_discovery_command))
     tg_app.add_handler(CommandHandler(["entry", "entries"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["recommend", "recommendations", "pick", "picks"], handle_recommendation_command))
+    tg_app.add_handler(CommandHandler(["recommend_cooldown", "cooldown"], handle_recommendation_cooldown_command))
     tg_app.add_handler(CommandHandler(["tvscan", "scan"], handle_tradingview_scan_command))
     tg_app.add_handler(CommandHandler(["changes", "transition", "transitions"], handle_lazy_alpha_transition_command))
     tg_app.add_handler(CommandHandler(["backtest", "audit"], handle_backtest_command))
@@ -1583,6 +1649,12 @@ async def _run() -> None:
         MessageHandler(
             filters.Regex(r"^/(?:추천|후보|추천후보)(?:@\S+)?(?:\s+.*)?$"),
             handle_recommendation_command,
+        )
+    )
+    tg_app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^/(?:추천쿨다운|쿨다운)(?:@\S+)?(?:\s+.*)?$"),
+            handle_recommendation_cooldown_command,
         )
     )
     tg_app.add_handler(
