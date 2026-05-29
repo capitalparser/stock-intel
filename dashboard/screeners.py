@@ -22,6 +22,7 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
     candidates.sort(
         key=lambda item: (
             item.status != CandidateStatus.SETUP,
+            item.price is None,
             -len(item.linked_lenses),
             -item.score,
             item.ticker,
@@ -60,6 +61,9 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         price=stock.price,
         day_change_pct=stock.day_change_pct,
         pe=stock.pe,
+        peer_pe=stock.peer_pe,
+        peer_group=stock.peer_group,
+        source_refs=stock.source_refs or [],
     )
 
 

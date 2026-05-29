@@ -51,12 +51,13 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         "",
         "## 상위 후보",
     ]
-    for candidate in dashboard.candidates[:10]:
+    for candidate in _top_candidates(dashboard)[:10]:
         view_names = ", ".join(lens.name for lens in candidate.linked_lenses)
         lines.append(
             f"- {candidate.ticker} {candidate.company}: "
             f"{_status_label(candidate)}, 매력도 {candidate.score:.1f}, "
-            f"가격 {_money(candidate.price)}, PER {_multiple(candidate.pe)}, 연결 관점 {view_names}"
+            f"가격 {_money(candidate.price)}, PER {_multiple(candidate.pe)} "
+            f"(동종군 {_multiple(candidate.peer_pe)}), 연결 관점 {view_names}"
         )
         if candidate.thesis:
             lines.append(f"  - 핵심 판단: {candidate.thesis}")
@@ -67,8 +68,12 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
 
 def render_dashboard_html(dashboard: Dashboard) -> str:
     candidate_rows = "\n".join(_candidate_row(candidate) for candidate in dashboard.candidates)
-    candidate_cards = "\n".join(_candidate_card(candidate) for candidate in dashboard.candidates)
+    candidate_cards = "\n".join(_candidate_card(candidate) for candidate in _top_candidates(dashboard)[:12])
     market_rows = "\n".join(_market_row(item) for item in dashboard.market_indicators)
+    candidate_count = len(dashboard.candidates)
+    priced_count = sum(1 for candidate in dashboard.candidates if candidate.price is not None)
+    setup_count = sum(1 for candidate in dashboard.candidates if candidate.status.value == "Setup")
+    research_count = sum(1 for candidate in dashboard.candidates if candidate.status.value == "Research")
     lens_cards = "\n".join(
         f"<article><h3>{escape(lens.name)}</h3>"
         f"<p>{escape(KIND_LABELS.get(lens.kind.value, lens.kind.value))} · "
@@ -86,12 +91,14 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
   <title>개인 투자 상황판</title>
   <style>
     :root {{
-      --bg: #f7f8fa;
+      --bg: #f3f6fb;
       --ink: #111827;
       --muted: #5b6472;
-      --line: #d9dee7;
+      --line: #d3dbea;
       --panel: #ffffff;
       --accent: #2563eb;
+      --accent-2: #14b8a6;
+      --accent-soft: #dbeafe;
       --warn: #b45309;
       --bad: #b91c1c;
     }}
@@ -106,6 +113,7 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     }}
     main {{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }}
     header {{ border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px; }}
+    .top-band {{ border-left: 4px solid var(--accent); background: linear-gradient(90deg, #eff6ff 0%, #ffffff 72%); padding: 16px; border-radius: 8px; }}
     h1 {{ font-size: 30px; margin: 0 0 8px; letter-spacing: 0; }}
     h2 {{ font-size: 20px; margin: 28px 0 12px; letter-spacing: 0; }}
     h3 {{ font-size: 15px; margin: 0 0 4px; letter-spacing: 0; }}
@@ -116,6 +124,7 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     .section-brief {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 18px; }}
     .kpis {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }}
     .kpi, article {{ background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }}
+    .kpi {{ border-top: 3px solid var(--accent-soft); }}
     .kpi strong {{ display: block; font-size: 18px; }}
     .view-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }}
     .candidate-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 12px; }}
@@ -124,7 +133,8 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     table {{ width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); }}
     th, td {{ padding: 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 13px; }}
-    .state-setup {{ color: var(--accent); font-weight: 700; }}
+    tbody tr:nth-child(even) {{ background: #fafcff; }}
+    .state-setup {{ color: var(--accent-2); font-weight: 700; }}
     .state-research {{ color: var(--warn); font-weight: 700; }}
     .state-blocked, .state-avoid {{ color: var(--bad); font-weight: 700; }}
     @media (max-width: 760px) {{
@@ -138,9 +148,11 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
 <main>
   <header>
     <p class="muted">기준일 {escape(dashboard.as_of)}</p>
-    <h1>개인 투자 상황판</h1>
-    <p>투자 가설, 섹터, 거시 환경, 투자 성향이 같은 후보를 가리키는지 점검합니다.</p>
-    <p class="muted">가격 기준: {escape(dashboard.price_time)}</p>
+    <div class="top-band">
+      <h1>개인 투자 상황판</h1>
+      <p>Market Insights에서 다루는 종목 전체를 한 화면에 모아, 어떤 후보가 지금 다시 볼 만한지 점검합니다.</p>
+      <p class="muted">가격 기준: {escape(dashboard.price_time)} · 전체 관찰 종목 {candidate_count}개 · 가격 입력 {priced_count}개</p>
+    </div>
     <nav class="tabs" aria-label="대시보드 보기">
       <span class="tab tab-active">요약</span>
       <span class="tab">진행현황</span>
@@ -159,9 +171,9 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     <div class="kpis">
       <div class="kpi"><span>현재 판단</span><strong>{escape(_regime_value(dashboard.regime.verdict))}</strong></div>
       <div class="kpi"><span>위험자산 선호</span><strong>{escape(_regime_value(dashboard.regime.risk_appetite))}</strong></div>
-      <div class="kpi"><span>금리</span><strong>{escape(_regime_value(dashboard.regime.rates))}</strong></div>
-      <div class="kpi"><span>달러</span><strong>{escape(_regime_value(dashboard.regime.dollar))}</strong></div>
-      <div class="kpi"><span>변동성</span><strong>{escape(_regime_value(dashboard.regime.volatility))}</strong></div>
+      <div class="kpi"><span>총 관찰 종목</span><strong>{candidate_count}</strong></div>
+      <div class="kpi"><span>검토 우선</span><strong>{setup_count}</strong></div>
+      <div class="kpi"><span>근거 보강</span><strong>{research_count}</strong></div>
     </div>
     <ul>{notes}</ul>
   </section>
@@ -177,9 +189,9 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     </table>
   </section>
   <section>
-    <h2>중첩 후보 요약</h2>
+    <h2>전체 종목 총괄표</h2>
     <table>
-      <thead><tr><th>종목</th><th>현재 상태</th><th>가격/PER</th><th>매력도</th><th>연결 관점</th><th>보강할 근거</th></tr></thead>
+      <thead><tr><th>종목</th><th>현재 상태</th><th>가격/PER</th><th>동종군 비교</th><th>매력도</th><th>연결 관점</th><th>보강할 근거</th></tr></thead>
       <tbody>{candidate_rows}</tbody>
     </table>
   </section>
@@ -202,9 +214,10 @@ def _candidate_row(candidate: Candidate) -> str:
         f"<br><span class=\"muted\">{escape(candidate.sector)}</span></td>"
         f"<td class=\"{escape(_state_class(candidate))}\">{escape(_status_label(candidate))}</td>"
         f"<td>{escape(_money(candidate.price))}<br><span class=\"muted\">PER {escape(_multiple(candidate.pe))}</span></td>"
+        f"<td>{escape(_peer_read(candidate))}<br><span class=\"muted\">{escape(candidate.peer_group or '-')}</span></td>"
         f"<td>{candidate.score:.1f}</td>"
         f"<td>{escape(lens_names)}</td>"
-        f"<td>{escape(gaps)}</td>"
+        f"<td>{escape(gaps)}<br><span class=\"muted\">{escape(_sources(candidate))}</span></td>"
         "</tr>"
     )
 
@@ -213,9 +226,10 @@ def _candidate_card(candidate: Candidate) -> str:
     return (
         '<article class="candidate-card">'
         f"<h3>{escape(candidate.ticker)} · {escape(candidate.company)}</h3>"
-        f"<p class=\"muted\">가격 {_money(candidate.price)} · 하루 변화 {_pct(candidate.day_change_pct)} · PER {_multiple(candidate.pe)} · 가장 강한 관점 {escape(candidate.strongest_lens)}</p>"
+        f"<p class=\"muted\">가격 {_money(candidate.price)} · 하루 변화 {_pct(candidate.day_change_pct)} · PER {_multiple(candidate.pe)} · 동종군 {_multiple(candidate.peer_pe)} · 가장 강한 관점 {escape(candidate.strongest_lens)}</p>"
         f"<p><strong>핵심 판단</strong><br>{escape(candidate.thesis or '핵심 판단을 보강해야 합니다.')}</p>"
         f"<p><strong>다음 확인</strong><br>{escape(candidate.next_action or '다음 공시와 가격 위치를 확인합니다.')}</p>"
+        f"<p class=\"muted\">인사이트 출처: {escape(_sources(candidate))}</p>"
         "<strong>상승 근거</strong>"
         f"{_list(candidate.bull_case or candidate.evidence)}"
         "<strong>주의 신호</strong>"
@@ -235,10 +249,21 @@ def _market_row(item) -> str:
     )
 
 
+def _top_candidates(dashboard: Dashboard) -> list[Candidate]:
+    priced = [candidate for candidate in dashboard.candidates if candidate.price is not None]
+    return priced or dashboard.candidates
+
+
 def _list(items: list[str]) -> str:
     if not items:
         return "<ul><li>-</li></ul>"
     return "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
+
+
+def _sources(candidate: Candidate) -> str:
+    if not candidate.source_refs:
+        return "-"
+    return ", ".join(candidate.source_refs[:4])
 
 
 def _status_label(candidate: Candidate) -> str:
@@ -288,3 +313,15 @@ def _multiple(value: float | None) -> str:
     if value is None:
         return "-"
     return f"{value:.1f}x"
+
+
+def _peer_read(candidate: Candidate) -> str:
+    if candidate.pe is None or candidate.peer_pe is None or candidate.peer_pe == 0:
+        return "비교 전"
+    spread = (candidate.pe / candidate.peer_pe - 1) * 100
+    if spread >= 20:
+        return f"동종군 대비 +{spread:.0f}%"
+    if spread <= -20:
+        return f"동종군 대비 {spread:.0f}%"
+    sign = "+" if spread > 0 else ""
+    return f"동종군 근처 ({sign}{spread:.0f}%)"

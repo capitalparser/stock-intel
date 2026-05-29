@@ -5,6 +5,7 @@ from dashboard.models import (
     parse_dashboard_input,
 )
 from dashboard.sample_data import load_sample_dashboard_input
+from dashboard.market_insights import load_market_insights_dashboard_input
 
 
 def test_parse_dashboard_input_accepts_same_level_lenses():
@@ -83,6 +84,8 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
                 "price": 123.77,
                 "day_change_pct": 1.39,
                 "pe": 91.0,
+                "peer_pe": 60.0,
+                "peer_group": "Power Semiconductors",
             }
         ],
     }
@@ -100,6 +103,8 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert parsed.stocks[0].next_action.startswith("Check next earnings")
     assert parsed.stocks[0].price == 123.77
     assert parsed.stocks[0].pe == 91.0
+    assert parsed.stocks[0].peer_pe == 60.0
+    assert parsed.stocks[0].peer_group == "Power Semiconductors"
     assert CandidateStatus.WATCH.value == "Watch"
 
 
@@ -118,3 +123,20 @@ def test_sample_dashboard_input_contains_initial_lens_set():
     assert any(stock.ticker == "TXN" for stock in parsed.stocks)
     assert any(stock.ticker == "VRT" for stock in parsed.stocks)
     assert any(item.symbol == "SMH" for item in parsed.market_indicators)
+
+
+def test_market_insights_loader_adds_all_related_tickers(tmp_path):
+    insights = tmp_path / "Market_Insights"
+    (insights / "themes").mkdir(parents=True)
+    (insights / "themes" / "stablecoin.md").write_text(
+        "---\nlabel: \"스테이블코인 결제 레일\"\nrelated_tickers: [COIN, V, MA]\n---\n",
+        encoding="utf-8",
+    )
+
+    parsed = load_market_insights_dashboard_input(insights)
+    tickers = {stock.ticker for stock in parsed.stocks}
+
+    assert {"COIN", "V", "MA"}.issubset(tickers)
+    assert next(stock for stock in parsed.stocks if stock.ticker == "COIN").source_refs == [
+        "스테이블코인 결제 레일"
+    ]

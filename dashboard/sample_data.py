@@ -152,6 +152,21 @@ SAMPLE_DASHBOARD = {
             },
             "risks": ["유동성 반전"],
         },
+        {
+            "id": "stablecoin_rails",
+            "kind": "thesis",
+            "name": "스테이블코인 결제 레일",
+            "conviction": "medium",
+            "direction": "improving",
+            "weights": {
+                "growth": 0.25,
+                "revision": 0.20,
+                "valuation": 0.20,
+                "quality": 0.25,
+                "momentum": 0.10,
+            },
+            "risks": ["규제 지연", "수익성 압축"],
+        },
     ],
     "stocks": [
         {
@@ -181,6 +196,8 @@ SAMPLE_DASHBOARD = {
             "price": 123.77,
             "day_change_pct": 1.39,
             "pe": 91.0,
+            "peer_pe": 60.0,
+            "peer_group": "전력·아날로그 반도체",
         },
         {
             "ticker": "TXN",
@@ -209,6 +226,8 @@ SAMPLE_DASHBOARD = {
             "price": 315.95,
             "day_change_pct": -0.11,
             "pe": 54.0,
+            "peer_pe": 60.0,
+            "peer_group": "전력·아날로그 반도체",
         },
         {
             "ticker": "ADI",
@@ -237,6 +256,8 @@ SAMPLE_DASHBOARD = {
             "price": 419.01,
             "day_change_pct": 0.59,
             "pe": 62.0,
+            "peer_pe": 60.0,
+            "peer_group": "전력·아날로그 반도체",
         },
         {
             "ticker": "NVDA",
@@ -265,6 +286,8 @@ SAMPLE_DASHBOARD = {
             "price": 212.30,
             "day_change_pct": 1.58,
             "pe": 32.6,
+            "peer_pe": 45.0,
+            "peer_group": "AI 가속기·반도체 리더",
         },
         {
             "ticker": "DELL",
@@ -293,6 +316,8 @@ SAMPLE_DASHBOARD = {
             "price": 317.05,
             "day_change_pct": 3.65,
             "pe": 42.3,
+            "peer_pe": 35.0,
+            "peer_group": "AI 서버·하드웨어",
         },
         {
             "ticker": "WDC",
@@ -321,6 +346,8 @@ SAMPLE_DASHBOARD = {
             "price": 531.18,
             "day_change_pct": 0.10,
             "pe": 31.8,
+            "peer_pe": 35.0,
+            "peer_group": "메모리·스토리지",
         },
         {
             "ticker": "VRT",
@@ -349,6 +376,8 @@ SAMPLE_DASHBOARD = {
             "price": 314.29,
             "day_change_pct": 2.53,
             "pe": 90.5,
+            "peer_pe": 55.0,
+            "peer_group": "데이터센터 전력·냉각",
         },
         {
             "ticker": "MPWR",
@@ -377,6 +406,8 @@ SAMPLE_DASHBOARD = {
             "price": 1399.54,
             "day_change_pct": 1.28,
             "pe": 84.8,
+            "peer_pe": 60.0,
+            "peer_group": "전력관리 반도체",
         },
     ],
 }

@@ -69,6 +69,9 @@ class StockInput:
     price: float | None = None
     day_change_pct: float | None = None
     pe: float | None = None
+    peer_pe: float | None = None
+    peer_group: str = ""
+    source_refs: list[str] | None = None
     blocked: bool = False
 
 
@@ -111,6 +114,9 @@ class Candidate:
     price: float | None
     day_change_pct: float | None
     pe: float | None
+    peer_pe: float | None
+    peer_group: str
+    source_refs: list[str]
 
 
 @dataclass(frozen=True)
@@ -153,6 +159,9 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             price=_optional_float(item.get("price")),
             day_change_pct=_optional_float(item.get("day_change_pct")),
             pe=_optional_float(item.get("pe")),
+            peer_pe=_optional_float(item.get("peer_pe")),
+            peer_group=str(item.get("peer_group", "")),
+            source_refs=[str(value) for value in item.get("source_refs", [])],
             blocked=bool(item.get("blocked", False)),
         )
         for item in payload.get("stocks", [])

@@ -14,12 +14,14 @@ def test_render_dashboard_html_contains_core_sections_and_no_raw_json():
     assert "시장 국면" in html
     assert "투자 관점 지도" in html
     assert "시장 온도판" in html
-    assert "중첩 후보 요약" in html
+    assert "전체 종목 총괄표" in html
     assert "후보별 판단 메모" in html
     assert "ON Semiconductor" in html
     assert "핵심 판단" in html
     assert "다음 확인" in html
     assert "가격/PER" in html
+    assert "동종군 비교" in html
+    assert "동종군 대비" in html
     assert "raw JSON" not in html
     assert "Verdict" not in html
     assert "Gap" not in html
@@ -38,6 +40,7 @@ def test_render_dashboard_markdown_is_compact_briefing():
     assert "핵심 판단" in text
     assert "다음 확인" in text
     assert "PER" in text
+    assert "동종군" in text
     assert "ON" in text
 
 
