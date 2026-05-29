@@ -257,6 +257,23 @@ Universe snapshot이 있으면 `/signals`는 TradingView 전체 watchlist 합집
 
 `시그널`, `신호`, `signals` 같은 일반 텍스트도 종목 검색으로 보내지 않고 `/signals` 콘솔을 엽니다.
 
+## Lens Investment Dashboard
+
+렌즈 투자 대시보드는 thesis, sector, macro, factor를 같은 계층의 Lens로 두고, 여러 렌즈가 동시에 가리키는 후보 종목을 점검합니다.
+
+```bash
+uv run python scripts/render_lens_dashboard.py
+```
+
+출력:
+
+```text
+state/dashboard/reports/YYYY-MM-DD-lens-dashboard.html
+state/dashboard/reports/YYYY-MM-DD-lens-dashboard.md
+```
+
+v1은 curated sample data로 모델과 화면을 검증합니다. live valuation/news API, raw source intake, Telegram delivery는 후속 단계에서 같은 `dashboard` 모델 위에 붙입니다.
+
 ## Production Direction
 
 개인 실사용은 작은 VPS 1대에 올리는 구성이 가장 단순합니다.
