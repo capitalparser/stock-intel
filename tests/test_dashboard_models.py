@@ -65,6 +65,10 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
                 },
                 "evidence": ["AI data-center revenue doubled year over year"],
                 "gaps": ["Confirm normalized PER after next earnings"],
+                "thesis": "Power semi exposure can matter if AI rack power density rises.",
+                "bull_case": ["Power chain demand expands beyond GPU."],
+                "bear_case": ["Auto cycle drag can offset AI strength."],
+                "next_action": "Check next earnings call for data-center power commentary.",
             }
         ],
     }
@@ -75,6 +79,9 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert parsed.lenses[0].kind == LensKind.THESIS
     assert parsed.lenses[1].kind == LensKind.SECTOR
     assert parsed.stocks[0].lens_ids == ["ai_agent_compute", "semiconductors"]
+    assert parsed.stocks[0].thesis.startswith("Power semi exposure")
+    assert parsed.stocks[0].bull_case == ["Power chain demand expands beyond GPU."]
+    assert parsed.stocks[0].next_action.startswith("Check next earnings")
     assert CandidateStatus.WATCH.value == "Watch"
 
 

@@ -51,6 +51,10 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         evidence=stock.evidence,
         gaps=stock.gaps,
         risk_flags=_risk_flags(stock, score),
+        thesis=stock.thesis,
+        bull_case=stock.bull_case or [],
+        bear_case=stock.bear_case or [],
+        next_action=stock.next_action,
     )
 
 

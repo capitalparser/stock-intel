@@ -10,12 +10,17 @@ def test_render_dashboard_html_contains_core_sections_and_no_raw_json():
     html = render_dashboard_html(dashboard)
 
     assert "<!doctype html>" in html
-    assert "Lens Investment Dashboard" in html
+    assert "개인 투자 상황판" in html
     assert "시장 국면" in html
-    assert "렌즈 맵" in html
-    assert "렌즈 중첩 후보" in html
+    assert "투자 관점 지도" in html
+    assert "중첩 후보 요약" in html
+    assert "후보별 판단 메모" in html
     assert "ON Semiconductor" in html
+    assert "핵심 판단" in html
+    assert "다음 확인" in html
     assert "raw JSON" not in html
+    assert "Verdict" not in html
+    assert "Gap" not in html
     assert "data-asset-purpose" not in html
 
 
@@ -24,9 +29,11 @@ def test_render_dashboard_markdown_is_compact_briefing():
 
     text = render_dashboard_markdown(dashboard)
 
-    assert text.startswith("# Lens Investment Dashboard")
+    assert text.startswith("# 개인 투자 상황판")
     assert "## 시장 국면" in text
     assert "## 상위 후보" in text
+    assert "핵심 판단" in text
+    assert "다음 확인" in text
     assert "ON" in text
 
 
@@ -35,5 +42,5 @@ def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
 
     assert html_path == tmp_path / "2026-05-29-lens-dashboard.html"
     assert md_path == tmp_path / "2026-05-29-lens-dashboard.md"
-    assert "Lens Investment Dashboard" in html_path.read_text(encoding="utf-8")
+    assert "개인 투자 상황판" in html_path.read_text(encoding="utf-8")
     assert "## 상위 후보" in md_path.read_text(encoding="utf-8")

@@ -62,6 +62,10 @@ class StockInput:
     metrics: StockMetrics
     evidence: list[str]
     gaps: list[str]
+    thesis: str = ""
+    bull_case: list[str] | None = None
+    bear_case: list[str] | None = None
+    next_action: str = ""
     blocked: bool = False
 
 
@@ -85,6 +89,10 @@ class Candidate:
     evidence: list[str]
     gaps: list[str]
     risk_flags: list[str]
+    thesis: str
+    bull_case: list[str]
+    bear_case: list[str]
+    next_action: str
 
 
 @dataclass(frozen=True)
@@ -118,6 +126,10 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             metrics=_parse_metrics(item.get("metrics", {})),
             evidence=[str(value) for value in item.get("evidence", [])],
             gaps=[str(value) for value in item.get("gaps", [])],
+            thesis=str(item.get("thesis", "")),
+            bull_case=[str(value) for value in item.get("bull_case", [])],
+            bear_case=[str(value) for value in item.get("bear_case", [])],
+            next_action=str(item.get("next_action", "")),
             blocked=bool(item.get("blocked", False)),
         )
         for item in payload.get("stocks", [])
