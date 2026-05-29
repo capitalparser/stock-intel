@@ -10,6 +10,7 @@ from dashboard.sample_data import load_sample_dashboard_input
 def test_parse_dashboard_input_accepts_same_level_lenses():
     payload = {
         "as_of": "2026-05-29",
+        "price_time": "2026-05-29 00:15 UTC",
         "regime": {
             "verdict": "conditional",
             "risk_appetite": "risk-on",
@@ -18,6 +19,16 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
             "volatility": "low",
             "notes": ["AI infrastructure heat remains elevated"],
         },
+        "market_indicators": [
+            {
+                "symbol": "SMH",
+                "name": "Semiconductor ETF",
+                "group": "반도체",
+                "price": 599.83,
+                "day_change_pct": 0.76,
+                "read": "반도체 강세 지속",
+            }
+        ],
         "lenses": [
             {
                 "id": "ai_agent_compute",
@@ -69,6 +80,9 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
                 "bull_case": ["Power chain demand expands beyond GPU."],
                 "bear_case": ["Auto cycle drag can offset AI strength."],
                 "next_action": "Check next earnings call for data-center power commentary.",
+                "price": 123.77,
+                "day_change_pct": 1.39,
+                "pe": 91.0,
             }
         ],
     }
@@ -77,11 +91,15 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
 
     assert isinstance(parsed, DashboardInput)
     assert parsed.lenses[0].kind == LensKind.THESIS
+    assert parsed.price_time == "2026-05-29 00:15 UTC"
+    assert parsed.market_indicators[0].symbol == "SMH"
     assert parsed.lenses[1].kind == LensKind.SECTOR
     assert parsed.stocks[0].lens_ids == ["ai_agent_compute", "semiconductors"]
     assert parsed.stocks[0].thesis.startswith("Power semi exposure")
     assert parsed.stocks[0].bull_case == ["Power chain demand expands beyond GPU."]
     assert parsed.stocks[0].next_action.startswith("Check next earnings")
+    assert parsed.stocks[0].price == 123.77
+    assert parsed.stocks[0].pe == 91.0
     assert CandidateStatus.WATCH.value == "Watch"
 
 
@@ -98,3 +116,5 @@ def test_sample_dashboard_input_contains_initial_lens_set():
     }.issubset(lens_ids)
     assert any(stock.ticker == "ON" for stock in parsed.stocks)
     assert any(stock.ticker == "TXN" for stock in parsed.stocks)
+    assert any(stock.ticker == "VRT" for stock in parsed.stocks)
+    assert any(item.symbol == "SMH" for item in parsed.market_indicators)

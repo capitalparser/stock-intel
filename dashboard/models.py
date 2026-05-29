@@ -66,13 +66,28 @@ class StockInput:
     bull_case: list[str] | None = None
     bear_case: list[str] | None = None
     next_action: str = ""
+    price: float | None = None
+    day_change_pct: float | None = None
+    pe: float | None = None
     blocked: bool = False
+
+
+@dataclass(frozen=True)
+class MarketIndicator:
+    symbol: str
+    name: str
+    group: str
+    price: float
+    day_change_pct: float
+    read: str
 
 
 @dataclass(frozen=True)
 class DashboardInput:
     as_of: str
     regime: MarketRegime
+    price_time: str
+    market_indicators: list[MarketIndicator]
     lenses: list[Lens]
     stocks: list[StockInput]
 
@@ -93,12 +108,17 @@ class Candidate:
     bull_case: list[str]
     bear_case: list[str]
     next_action: str
+    price: float | None
+    day_change_pct: float | None
+    pe: float | None
 
 
 @dataclass(frozen=True)
 class Dashboard:
     as_of: str
     regime: MarketRegime
+    price_time: str
+    market_indicators: list[MarketIndicator]
     lenses: list[Lens]
     candidates: list[Candidate]
 
@@ -130,6 +150,9 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             bull_case=[str(value) for value in item.get("bull_case", [])],
             bear_case=[str(value) for value in item.get("bear_case", [])],
             next_action=str(item.get("next_action", "")),
+            price=_optional_float(item.get("price")),
+            day_change_pct=_optional_float(item.get("day_change_pct")),
+            pe=_optional_float(item.get("pe")),
             blocked=bool(item.get("blocked", False)),
         )
         for item in payload.get("stocks", [])
@@ -144,6 +167,18 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             volatility=str(regime_payload["volatility"]),
             notes=[str(value) for value in regime_payload.get("notes", [])],
         ),
+        price_time=str(payload.get("price_time", "")),
+        market_indicators=[
+            MarketIndicator(
+                symbol=str(item["symbol"]),
+                name=str(item["name"]),
+                group=str(item["group"]),
+                price=float(item["price"]),
+                day_change_pct=float(item["day_change_pct"]),
+                read=str(item["read"]),
+            )
+            for item in payload.get("market_indicators", [])
+        ],
         lenses=lenses,
         stocks=stocks,
     )
@@ -157,3 +192,9 @@ def _parse_metrics(payload: dict[str, Any]) -> StockMetrics:
         revision=float(payload.get("revision", 0)),
         momentum=float(payload.get("momentum", 0)),
     )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)

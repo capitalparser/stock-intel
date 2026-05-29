@@ -30,6 +30,8 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
     return Dashboard(
         as_of=source.as_of,
         regime=source.regime,
+        price_time=source.price_time,
+        market_indicators=source.market_indicators,
         lenses=source.lenses,
         candidates=candidates,
     )
@@ -55,6 +57,9 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         bull_case=stock.bull_case or [],
         bear_case=stock.bear_case or [],
         next_action=stock.next_action,
+        price=stock.price,
+        day_change_pct=stock.day_change_pct,
+        pe=stock.pe,
     )
 
 

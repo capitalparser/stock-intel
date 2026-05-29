@@ -32,6 +32,7 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         "# 개인 투자 상황판",
         "",
         f"기준일: {dashboard.as_of}",
+        f"가격 기준: {dashboard.price_time}",
         "",
         "## 시장 국면",
         f"- 현재 판단: {_regime_value(dashboard.regime.verdict)}",
@@ -40,13 +41,22 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         f"- 달러: {_regime_value(dashboard.regime.dollar)}",
         f"- 변동성: {_regime_value(dashboard.regime.volatility)}",
         "",
+        "## 시장 온도판",
+    ]
+    for item in dashboard.market_indicators:
+        lines.append(
+            f"- {item.symbol} {item.name}: {_money(item.price)}, {_pct(item.day_change_pct)} · {item.read}"
+        )
+    lines += [
+        "",
         "## 상위 후보",
     ]
     for candidate in dashboard.candidates[:10]:
         view_names = ", ".join(lens.name for lens in candidate.linked_lenses)
         lines.append(
             f"- {candidate.ticker} {candidate.company}: "
-            f"{_status_label(candidate)}, 매력도 {candidate.score:.1f}, 연결 관점 {view_names}"
+            f"{_status_label(candidate)}, 매력도 {candidate.score:.1f}, "
+            f"가격 {_money(candidate.price)}, PER {_multiple(candidate.pe)}, 연결 관점 {view_names}"
         )
         if candidate.thesis:
             lines.append(f"  - 핵심 판단: {candidate.thesis}")
@@ -58,6 +68,7 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
 def render_dashboard_html(dashboard: Dashboard) -> str:
     candidate_rows = "\n".join(_candidate_row(candidate) for candidate in dashboard.candidates)
     candidate_cards = "\n".join(_candidate_card(candidate) for candidate in dashboard.candidates)
+    market_rows = "\n".join(_market_row(item) for item in dashboard.market_indicators)
     lens_cards = "\n".join(
         f"<article><h3>{escape(lens.name)}</h3>"
         f"<p>{escape(KIND_LABELS.get(lens.kind.value, lens.kind.value))} · "
@@ -129,6 +140,7 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     <p class="muted">기준일 {escape(dashboard.as_of)}</p>
     <h1>개인 투자 상황판</h1>
     <p>투자 가설, 섹터, 거시 환경, 투자 성향이 같은 후보를 가리키는지 점검합니다.</p>
+    <p class="muted">가격 기준: {escape(dashboard.price_time)}</p>
     <nav class="tabs" aria-label="대시보드 보기">
       <span class="tab tab-active">요약</span>
       <span class="tab">진행현황</span>
@@ -142,7 +154,7 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     <div class="section-brief">
       <article><h3>현재 상태</h3><p>AI 인프라 수요는 살아 있으나 주가에는 과열 부담이 함께 반영된 상태입니다.</p></article>
       <article><h3>왜 중요한가</h3><p>좋은 산업도 기대치가 앞서면 조정을 받을 수 있어, 후보를 가격과 근거로 다시 나눠야 합니다.</p></article>
-      <article><h3>다음 행동</h3><p>AI 전력 병목과 저PER+이익상향 관점이 동시에 걸리는 후보부터 근거를 보강합니다.</p></article>
+      <article><h3>다음 행동</h3><p>AI 전력 병목과 가치평가·이익상향 관점이 동시에 걸리는 후보부터 근거를 보강합니다.</p></article>
     </div>
     <div class="kpis">
       <div class="kpi"><span>현재 판단</span><strong>{escape(_regime_value(dashboard.regime.verdict))}</strong></div>
@@ -158,9 +170,16 @@ def render_dashboard_html(dashboard: Dashboard) -> str:
     <div class="view-grid">{lens_cards}</div>
   </section>
   <section>
+    <h2>시장 온도판</h2>
+    <table>
+      <thead><tr><th>구분</th><th>가격</th><th>하루 변화</th><th>해석</th></tr></thead>
+      <tbody>{market_rows}</tbody>
+    </table>
+  </section>
+  <section>
     <h2>중첩 후보 요약</h2>
     <table>
-      <thead><tr><th>종목</th><th>현재 상태</th><th>매력도</th><th>연결 관점</th><th>가장 강한 관점</th><th>보강할 근거</th></tr></thead>
+      <thead><tr><th>종목</th><th>현재 상태</th><th>가격/PER</th><th>매력도</th><th>연결 관점</th><th>보강할 근거</th></tr></thead>
       <tbody>{candidate_rows}</tbody>
     </table>
   </section>
@@ -182,9 +201,9 @@ def _candidate_row(candidate: Candidate) -> str:
         f"<td><strong>{escape(candidate.ticker)}</strong><br>{escape(candidate.company)}"
         f"<br><span class=\"muted\">{escape(candidate.sector)}</span></td>"
         f"<td class=\"{escape(_state_class(candidate))}\">{escape(_status_label(candidate))}</td>"
+        f"<td>{escape(_money(candidate.price))}<br><span class=\"muted\">PER {escape(_multiple(candidate.pe))}</span></td>"
         f"<td>{candidate.score:.1f}</td>"
         f"<td>{escape(lens_names)}</td>"
-        f"<td>{escape(candidate.strongest_lens)}</td>"
         f"<td>{escape(gaps)}</td>"
         "</tr>"
     )
@@ -194,6 +213,7 @@ def _candidate_card(candidate: Candidate) -> str:
     return (
         '<article class="candidate-card">'
         f"<h3>{escape(candidate.ticker)} · {escape(candidate.company)}</h3>"
+        f"<p class=\"muted\">가격 {_money(candidate.price)} · 하루 변화 {_pct(candidate.day_change_pct)} · PER {_multiple(candidate.pe)} · 가장 강한 관점 {escape(candidate.strongest_lens)}</p>"
         f"<p><strong>핵심 판단</strong><br>{escape(candidate.thesis or '핵심 판단을 보강해야 합니다.')}</p>"
         f"<p><strong>다음 확인</strong><br>{escape(candidate.next_action or '다음 공시와 가격 위치를 확인합니다.')}</p>"
         "<strong>상승 근거</strong>"
@@ -201,6 +221,17 @@ def _candidate_card(candidate: Candidate) -> str:
         "<strong>주의 신호</strong>"
         f"{_list(candidate.bear_case or candidate.risk_flags or candidate.gaps)}"
         "</article>"
+    )
+
+
+def _market_row(item) -> str:
+    return (
+        "<tr>"
+        f"<td><strong>{escape(item.symbol)}</strong><br>{escape(item.name)}<br><span class=\"muted\">{escape(item.group)}</span></td>"
+        f"<td>{escape(_money(item.price))}</td>"
+        f"<td>{escape(_pct(item.day_change_pct))}</td>"
+        f"<td>{escape(item.read)}</td>"
+        "</tr>"
     )
 
 
@@ -238,3 +269,22 @@ def _regime_value(value: str) -> str:
         "normal": "보통",
         "high": "높음",
     }.get(value, value)
+
+
+def _money(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"${value:,.2f}"
+
+
+def _pct(value: float | None) -> str:
+    if value is None:
+        return "-"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.2f}%"
+
+
+def _multiple(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.1f}x"
