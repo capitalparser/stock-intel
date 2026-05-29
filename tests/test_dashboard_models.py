@@ -4,6 +4,7 @@ from dashboard.models import (
     LensKind,
     parse_dashboard_input,
 )
+from dashboard.sample_data import load_sample_dashboard_input
 
 
 def test_parse_dashboard_input_accepts_same_level_lenses():
@@ -75,3 +76,18 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert parsed.lenses[1].kind == LensKind.SECTOR
     assert parsed.stocks[0].lens_ids == ["ai_agent_compute", "semiconductors"]
     assert CandidateStatus.WATCH.value == "Watch"
+
+
+def test_sample_dashboard_input_contains_initial_lens_set():
+    parsed = load_sample_dashboard_input()
+
+    lens_ids = {lens.id for lens in parsed.lenses}
+    assert {
+        "ai_agent_compute",
+        "ai_power_bottleneck",
+        "low_per_revision",
+        "semiconductors",
+        "power_analog",
+    }.issubset(lens_ids)
+    assert any(stock.ticker == "ON" for stock in parsed.stocks)
+    assert any(stock.ticker == "TXN" for stock in parsed.stocks)
