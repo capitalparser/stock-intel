@@ -1,0 +1,22 @@
+version: 1
+updated_at: "2026-05-30"
+purpose: "Classify RWA/tokenization-exposed names by infrastructure role, not by price signal."
+entries:
+  - name: "BlackRock"
+    ticker: "BLK"
+    exposure_type: "issuer_asset_manager"
+    thesis: "Tokenized fund issuer and institutional distribution layer."
+    required_evidence: ["aum", "holder_count", "transfer_activity", "fee_capture"]
+    warning: "AUM growth does not prove tokenized workflow revenue."
+  - name: "Coinbase"
+    ticker: "COIN"
+    exposure_type: "custody_distribution"
+    thesis: "Possible custody, distribution, and stablecoin operating layer."
+    required_evidence: ["custody_revenue", "institutional_flow", "regulated_product_access"]
+    warning: "Crypto trading volume is not the same as RWA institutional adoption."
+  - name: "Chainlink"
+    ticker: "LINK"
+    exposure_type: "oracle_interoperability"
+    thesis: "Proof, messaging, and oracle infrastructure candidate."
+    required_evidence: ["paid_usage", "ccip_volume", "enterprise_contracts"]
+    warning: "Network integration announcements need fee-capture evidence."

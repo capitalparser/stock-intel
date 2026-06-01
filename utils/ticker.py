@@ -116,39 +116,68 @@ def load_ticker_cache() -> list[dict]:
 
 
 def search_ticker(name: str) -> list[dict]:
-    """종목명 퍼지 검색.
+    """종목명 또는 종목코드 퍼지 검색.
 
-    WRatio >= 75인 결과를 점수 내림차순으로 최대 5개 반환.
+    검색 우선순위:
+      1. 6자리 숫자 → 코드 직접 매칭 (005930 등)
+      2. 전체 입력 WRatio >= 90 고신뢰 매칭
+      3. 입력을 토큰으로 분리해 각 토큰별 WRatio >= 90 결과 취합 (자연어 혼재 대응)
+      4. 전체 입력 WRatio >= 75 저신뢰 매칭 (fallback)
 
     Args:
-        name: 검색할 종목명 (부분 문자열 가능).
+        name: 검색할 종목명·코드 또는 자연어 문장.
 
     Returns:
         [{"code": "005930", "name": "삼성전자", "market": "KOSPI", "score": 100.0}, ...]
     """
+    query = name.strip()
     cache = load_ticker_cache()
     candidates: dict[str, dict] = {item["name"]: item for item in cache}
+    code_map: dict[str, dict] = {item["code"]: item for item in cache}
 
-    results = process.extract(
-        name,
-        candidates.keys(),
-        scorer=fuzz.WRatio,
-        limit=5,
-        score_cutoff=75,
-    )
-
-    output: list[dict] = []
-    for matched_name, score, _ in results:
+    def _to_output(matched_name: str, score: float) -> dict:
         item = candidates[matched_name]
-        output.append(
-            {
-                "code": item["code"],
-                "name": item["name"],
-                "market": item["market"],
-                "score": round(score, 1),
-            }
-        )
+        return {
+            "code": item["code"],
+            "name": item["name"],
+            "market": item["market"],
+            "score": round(score, 1),
+        }
 
-    # 점수 내림차순 정렬 (process.extract는 이미 정렬되지만 명시적으로 보장)
-    output.sort(key=lambda x: x["score"], reverse=True)
-    return output
+    # 1. 6자리 숫자 → 코드 직접 매칭
+    if query.isdigit() and len(query) == 6 and query in code_map:
+        item = code_map[query]
+        return [{"code": item["code"], "name": item["name"], "market": item["market"], "score": 100.0}]
+
+    def _fuzzy_extract(q: str, cutoff: float) -> list[dict]:
+        hits = process.extract(q, candidates.keys(), scorer=fuzz.WRatio, limit=5, score_cutoff=cutoff)
+        return [_to_output(n, s) for n, s, _ in hits]
+
+    words = query.split()
+
+    if len(words) == 1:
+        # 단일 토큰: 직접 퍼지 매칭
+        # 2a. 고신뢰
+        results = _fuzzy_extract(query, 90)
+        if results:
+            return sorted(results, key=lambda x: x["score"], reverse=True)
+        # 2b. 저신뢰 fallback
+        results = _fuzzy_extract(query, 75)
+        return sorted(results, key=lambda x: x["score"], reverse=True)
+
+    # 다단어: 전체 문장 퍼지는 부분 문자열 오매칭 위험 — 토큰별로 검색
+    # 3. 각 토큰 WRatio >= 90 결과 취합
+    seen: dict[str, dict] = {}
+    for token in words:
+        if len(token) < 2:
+            continue
+        for hit in _fuzzy_extract(token, 90):
+            code = hit["code"]
+            if code not in seen or hit["score"] > seen[code]["score"]:
+                seen[code] = hit
+    if seen:
+        return sorted(seen.values(), key=lambda x: x["score"], reverse=True)[:5]
+
+    # 4. 전체 입력 저신뢰(>= 75) fallback
+    results = _fuzzy_extract(query, 75)
+    return sorted(results, key=lambda x: x["score"], reverse=True)
