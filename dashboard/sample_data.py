@@ -61,6 +61,72 @@ SAMPLE_DASHBOARD = {
             "read": "전력·데이터센터 인프라 후보와 연결되는 후방 섹터.",
         },
     ],
+    "macro_state": {
+        "current_state": "fragile rally",
+        "why_it_matters": "지수는 강하지만 시장 폭·금리·유가 중 일부가 랠리의 질을 의심하는 구간입니다.",
+        "next_action": "신규 진입 강도를 낮추고 후보를 압축",
+        "indicator_reads": [
+            {
+                "dimension": "breadth",
+                "label": "시장 폭",
+                "state": "warning",
+                "read": "동일가중과 50일선 상회 비율 확인 필요. 소수 대형주 주도 가능성.",
+                "symbols": ["RSP", "S5FI"],
+            },
+            {
+                "dimension": "sentiment",
+                "label": "시장 심리",
+                "state": "supportive",
+                "read": "변동성은 아직 패닉이 아니지만 신고가 장세 대비 방어 수요를 점검.",
+                "symbols": ["^VIX"],
+            },
+            {
+                "dimension": "rates",
+                "label": "금리",
+                "state": "warning",
+                "read": "미 10년물 4.5% 재상승 여부가 성장주 밸류에이션의 핵심 압력.",
+                "symbols": ["^TNX"],
+            },
+            {
+                "dimension": "fx",
+                "label": "환율",
+                "state": "supportive",
+                "read": "달러와 원화는 패닉보다 중립에 가까우나 유가 상승 시 한국 비용 압력 확대.",
+                "symbols": ["DX-Y.NYB", "USDKRW=X"],
+            },
+            {
+                "dimension": "commodities",
+                "label": "원자재",
+                "state": "supportive",
+                "read": "금과 구리는 리스크·성장 기대를 함께 반영하므로 단독 결론보다 보조 지표로 사용.",
+                "symbols": ["GLD", "CPER"],
+            },
+            {
+                "dimension": "oil",
+                "label": "유가",
+                "state": "stressed",
+                "read": "Brent 95달러 위 고착 여부가 인플레와 마진 압박의 핵심 트리거.",
+                "symbols": ["BZ=F", "CL=F"],
+            },
+        ],
+        "issues": [
+            {
+                "theme": "지정학",
+                "title": "중동 휴전 기대와 현장 충돌의 괴리",
+                "state": "unresolved",
+                "summary": "협상 기대는 남아 있으나 유가·금리·변동성이 종전 신뢰도를 확인해야 하는 상태.",
+                "triggers": ["Brent 95달러 위 고착", "미 10년물 4.5% 재상승", "VIX 동반 상승"],
+                "source_gaps": ["실시간 뉴스 자동 요약 미연결"],
+            }
+        ],
+        "watchlist_impact": {
+            "growth_ai": "chase 제한",
+            "cyclicals": "금리·유가 확인 후 압축",
+            "energy_defense": "상대강도 관찰",
+            "korea": "USDKRW·유가 부담 점검",
+        },
+        "data_gaps": ["breadth 일부 지표는 실시간 소스 연결 필요"],
+    },
     "lenses": [
         {
             "id": "ai_agent_compute",

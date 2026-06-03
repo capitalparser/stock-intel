@@ -44,9 +44,42 @@ def test_render_dashboard_markdown_is_compact_briefing():
     assert "ON" in text
 
 
-def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
-    html_path, md_path = write_dashboard_reports(output_dir=tmp_path)
+def test_render_dashboard_html_contains_macro_state_cockpit():
+    dashboard = build_dashboard(load_sample_dashboard_input())
 
+    html = render_dashboard_html(dashboard)
+
+    assert "매크로 현재 상태" in html
+    assert "현재 상태" in html
+    assert "오늘의 주요 이슈" in html
+    assert "시장 폭" in html
+    assert "시장 심리" in html
+    assert "금리" in html
+    assert "환율" in html
+    assert "원자재" in html
+    assert "유가" in html
+    assert "종목 후보 영향" in html
+    assert "macro_state" not in html
+    assert "Issue Card" not in html
+
+
+def test_render_dashboard_markdown_contains_macro_state_brief():
+    dashboard = build_dashboard(load_sample_dashboard_input())
+
+    text = render_dashboard_markdown(dashboard)
+
+    assert "## 매크로 현재 상태" in text
+    assert "## 오늘의 주요 이슈" in text
+    assert "## 종목 후보 영향" in text
+
+
+def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
+    # Force curated sample for a deterministic as_of date (no snapshot dependency).
+    html_path, md_path, used_snapshot = write_dashboard_reports(
+        output_dir=tmp_path, use_snapshot=False
+    )
+
+    assert used_snapshot is False
     assert html_path == tmp_path / "2026-05-29-lens-dashboard.html"
     assert md_path == tmp_path / "2026-05-29-lens-dashboard.md"
     assert "개인 투자 상황판" in html_path.read_text(encoding="utf-8")
