@@ -298,7 +298,7 @@ function renderCards() {
     div.dataset.tags = JSON.stringify(c.tags||[]);
     div.innerHTML = `
       <div class="cc-top">
-        <div><div class="cc-ticker">${c.ticker}</div><div class="cc-co">${c.company}</div></div>
+        <div><div class="cc-ticker">${c.display_name}</div><div class="cc-co">${c.display_meta}</div></div>
         <span class="cc-stag">${c.sector}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;margin:8px 0 2px">
@@ -340,7 +340,7 @@ function renderTable() {
     const lT=(c.lenses||[]).slice(0,2).join(', ')||'—';
     const tr=document.createElement('tr');
     tr.innerHTML=`
-      <td><div class="td-t">${c.ticker}</div><div class="td-co">${c.company}</div></td>
+      <td><div class="td-t">${c.display_name}</div><div class="td-co">${c.display_meta}</div></td>
       <td><span class="st-${c.status}">${c.status_label}</span></td>
       <td>${fmtP(c.price)}${c.change!==null?` <span class="${chC}" style="font-size:10px">${chT}</span>`:''}</td>
       <td style="color:var(--muted)">${c.pe!==null?c.pe+'x':'—'}</td>
@@ -362,8 +362,8 @@ function openDetail(c) {
   const gH=(c.gaps||[]).map(g=>`<li>${g}</li>`).join('');
   const lH=(c.lenses||[]).map(l=>`<span class="d-ltag">${l}</span>`).join('');
   ct.innerHTML=`
-    <div class="dt">${c.ticker}</div>
-    <div class="dco">${c.company} · ${c.sector}</div>
+    <div class="dt">${c.display_name}</div>
+    <div class="dco">${c.display_meta}</div>
     <div class="dp-row"><span class="dp">${fmtP(c.price)}</span><span class="dc ${chC}">${chT}</span></div>
     <div class="dper">PER ${c.pe!==null?c.pe+'x':'—'} · 동종군 대비 ${c.peer_pe!==null?c.peer_pe+'x':'—'} · 매력도 ${c.score}</div>
     <div class="d-spark"><canvas id="d-sp"></canvas></div>
@@ -474,7 +474,7 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
     for candidate in _top_candidates(dashboard)[:10]:
         view_names = ", ".join(lens.name for lens in candidate.linked_lenses)
         lines.append(
-            f"- {candidate.ticker} {candidate.company}: "
+            f"- {_markdown_stock_label(candidate)}: "
             f"{_status_label(candidate)}, 매력도 {candidate.score:.1f}, "
             f"가격 {_money(candidate.price)}, PER {_multiple(candidate.pe)} "
             f"(동종군 {_multiple(candidate.peer_pe)}), 연결 관점 {view_names}"
@@ -530,12 +530,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
         for i, (fid, flabel) in enumerate(filter_tags)
     )
 
-    # Build JS data: priced candidates as full records
-    priced = [c for c in dashboard.candidates if c.price is not None]
-    unpriced = [c for c in dashboard.candidates if c.price is None]
-
-    lens_name_map = {lens.id: lens.name for lens in dashboard.lenses}
-
+    # Build JS data: every candidate gets a card; missing market data stays visible as "—".
     def _to_js(c: Candidate, full: bool = True) -> dict:
         tags = list({
             _LENS_FILTER_TAG[lns.id]
@@ -545,6 +540,8 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
         base: dict = {
             "ticker": c.ticker,
             "company": c.company,
+            "display_name": _display_name(c),
+            "display_meta": _display_meta(c),
             "sector": c.sector,
             "tags": tags,
             "price": c.price,
@@ -570,11 +567,9 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
         return base
 
     candidates_json = json.dumps(
-        [_to_js(c, full=True) for c in priced], ensure_ascii=False
+        [_to_js(c, full=True) for c in dashboard.candidates], ensure_ascii=False
     )
-    table_extra_json = json.dumps(
-        [_to_js(c, full=False) for c in unpriced], ensure_ascii=False
-    )
+    table_extra_json = json.dumps([], ensure_ascii=False)
 
     js = (
         _DARK_JS
@@ -728,6 +723,27 @@ def _macro_state_label(value: str) -> str:
         "stressed": "압박",
         "unavailable": "확인 필요",
     }.get(value, value)
+
+
+def _display_name(candidate: Candidate) -> str:
+    return candidate.company if _is_kr_stock(candidate) else candidate.ticker
+
+
+def _display_meta(candidate: Candidate) -> str:
+    if _is_kr_stock(candidate):
+        return f"{candidate.ticker} · {candidate.sector}"
+    return f"{candidate.company} · {candidate.sector}"
+
+
+def _markdown_stock_label(candidate: Candidate) -> str:
+    if _is_kr_stock(candidate):
+        return f"{candidate.company} ({candidate.ticker})"
+    return f"{candidate.ticker} {candidate.company}"
+
+
+def _is_kr_stock(candidate: Candidate) -> bool:
+    return bool(re.fullmatch(r"\d{6}", candidate.ticker))
+
 
 def _fake_sparkline(ticker: str, price: float) -> list[float]:
     """Seeded 20-point fake sparkline ending at current price."""

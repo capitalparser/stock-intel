@@ -1,6 +1,8 @@
 from dashboard.render import render_dashboard_html, render_dashboard_markdown
 from dashboard.sample_data import load_sample_dashboard_input
 from dashboard.screeners import build_dashboard
+from dashboard.models import parse_dashboard_input
+from dashboard.market_insights import load_market_insights_dashboard_input
 from scripts.render_lens_dashboard import write_dashboard_reports
 
 
@@ -71,6 +73,99 @@ def test_render_dashboard_markdown_contains_macro_state_brief():
     assert "## 매크로 현재 상태" in text
     assert "## 오늘의 주요 이슈" in text
     assert "## 종목 후보 영향" in text
+
+
+def test_render_dashboard_uses_korean_company_name_as_primary_for_kr_stocks():
+    dashboard_input = parse_dashboard_input(
+        {
+            "as_of": "2026-06-03",
+            "price_time": "2026-06-03T00:00:00+09:00",
+            "regime": {
+                "verdict": "conditional",
+                "risk_appetite": "risk-on",
+                "rates": "stable",
+                "dollar": "stable",
+                "volatility": "low",
+                "notes": [],
+            },
+            "market_indicators": [],
+            "lenses": [
+                {
+                    "id": "semiconductors",
+                    "kind": "sector",
+                    "name": "반도체",
+                    "conviction": "high",
+                    "direction": "stable",
+                    "weights": {
+                        "valuation": 0.2,
+                        "quality": 0.2,
+                        "growth": 0.2,
+                        "revision": 0.2,
+                        "momentum": 0.2,
+                    },
+                    "risks": [],
+                }
+            ],
+            "stocks": [
+                {
+                    "ticker": "005930",
+                    "company": "삼성전자",
+                    "sector": "반도체",
+                    "lens_ids": ["semiconductors"],
+                    "metrics": {
+                        "valuation": 60,
+                        "quality": 80,
+                        "growth": 70,
+                        "revision": 65,
+                        "momentum": 55,
+                    },
+                    "evidence": ["HBM·메모리 사이클 점검 대상"],
+                    "gaps": [],
+                    "thesis": "메모리 업사이클 기준 종목.",
+                    "bull_case": ["메모리 가격 상승과 HBM 증설 수혜."],
+                    "bear_case": ["원화 약세와 CAPEX 부담."],
+                    "next_action": "HBM 출하와 메모리 ASP를 확인.",
+                    "price": 82000,
+                    "day_change_pct": 1.2,
+                    "pe": 18,
+                    "peer_pe": 22,
+                    "peer_group": "메모리",
+                }
+            ],
+        }
+    )
+    dashboard = build_dashboard(dashboard_input)
+
+    html = render_dashboard_html(dashboard, db_path="/tmp/missing-stock-intel-state.db")
+    text = render_dashboard_markdown(dashboard)
+
+    assert '"display_name": "삼성전자"' in html
+    assert '"display_meta": "005930 · 반도체"' in html
+    assert '<div class="cc-ticker">${c.display_name}</div><div class="cc-co">${c.display_meta}</div>' in html
+    assert '<td><div class="td-t">${c.display_name}</div><div class="td-co">${c.display_meta}</div></td>' in html
+    assert '<div class="dt">${c.display_name}</div>' in html
+    assert '<div class="dco">${c.display_meta}</div>' in html
+    assert "- 삼성전자 (005930):" in text
+
+
+def test_render_dashboard_includes_unpriced_market_insight_stocks_as_cards(tmp_path):
+    insights = tmp_path / "Market_Insights"
+    (insights / "themes").mkdir(parents=True)
+    (insights / "themes" / "power.md").write_text(
+        "---\n"
+        "label: \"AI 전력 병목\"\n"
+        "related_tickers: [034020]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+    dashboard = build_dashboard(load_market_insights_dashboard_input(insights))
+
+    html = render_dashboard_html(dashboard, db_path="/tmp/missing-stock-intel-state.db")
+
+    assert '"ticker": "034020"' in html
+    assert '"display_name": "두산에너빌리티"' in html
+    assert '"price": null' in html
+    assert '"thesis": "두산에너빌리티: AI 전력 병목 관점' in html
 
 
 def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):

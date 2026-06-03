@@ -197,3 +197,25 @@ def test_market_insights_loader_adds_all_related_tickers(tmp_path):
     assert next(stock for stock in parsed.stocks if stock.ticker == "COIN").source_refs == [
         "스테이블코인 결제 레일"
     ]
+
+
+def test_market_insights_loader_builds_filled_korean_company_card(tmp_path):
+    insights = tmp_path / "Market_Insights"
+    (insights / "themes").mkdir(parents=True)
+    (insights / "themes" / "power.md").write_text(
+        "---\n"
+        "label: \"AI 전력 병목\"\n"
+        "related_tickers: [034020]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    parsed = load_market_insights_dashboard_input(insights)
+    stock = next(stock for stock in parsed.stocks if stock.ticker == "034020")
+
+    assert stock.company == "두산에너빌리티"
+    assert "AI 전력 병목" in stock.thesis
+    assert "보강 전" not in stock.thesis
+    assert any("전력" in item for item in stock.bull_case)
+    assert any("가격" in item or "실적" in item for item in stock.gaps)
+    assert stock.next_action.startswith("최근 가격")
