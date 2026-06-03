@@ -86,11 +86,50 @@ class MarketIndicator:
 
 
 @dataclass(frozen=True)
+class MacroIndicatorRead:
+    dimension: str
+    label: str
+    state: str
+    read: str
+    symbols: list[str]
+
+
+@dataclass(frozen=True)
+class MacroIssue:
+    theme: str
+    title: str
+    state: str
+    summary: str
+    triggers: list[str]
+    source_gaps: list[str]
+
+
+@dataclass(frozen=True)
+class WatchlistImpact:
+    growth_ai: str
+    cyclicals: str
+    energy_defense: str
+    korea: str
+
+
+@dataclass(frozen=True)
+class MacroState:
+    current_state: str
+    why_it_matters: str
+    next_action: str
+    indicator_reads: list[MacroIndicatorRead]
+    issues: list[MacroIssue]
+    watchlist_impact: WatchlistImpact
+    data_gaps: list[str]
+
+
+@dataclass(frozen=True)
 class DashboardInput:
     as_of: str
     regime: MarketRegime
     price_time: str
     market_indicators: list[MarketIndicator]
+    macro_state: MacroState | None
     lenses: list[Lens]
     stocks: list[StockInput]
 
@@ -125,6 +164,7 @@ class Dashboard:
     regime: MarketRegime
     price_time: str
     market_indicators: list[MarketIndicator]
+    macro_state: MacroState | None
     lenses: list[Lens]
     candidates: list[Candidate]
 
@@ -188,6 +228,7 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             )
             for item in payload.get("market_indicators", [])
         ],
+        macro_state=_parse_macro_state(payload.get("macro_state")),
         lenses=lenses,
         stocks=stocks,
     )
@@ -200,6 +241,45 @@ def _parse_metrics(payload: dict[str, Any]) -> StockMetrics:
         growth=float(payload.get("growth", 0)),
         revision=float(payload.get("revision", 0)),
         momentum=float(payload.get("momentum", 0)),
+    )
+
+
+def _parse_macro_state(payload: dict[str, Any] | None) -> MacroState | None:
+    if not payload:
+        return None
+    impact = payload.get("watchlist_impact") or {}
+    return MacroState(
+        current_state=str(payload["current_state"]),
+        why_it_matters=str(payload["why_it_matters"]),
+        next_action=str(payload["next_action"]),
+        indicator_reads=[
+            MacroIndicatorRead(
+                dimension=str(item["dimension"]),
+                label=str(item["label"]),
+                state=str(item["state"]),
+                read=str(item["read"]),
+                symbols=[str(value) for value in item.get("symbols", [])],
+            )
+            for item in payload.get("indicator_reads", [])
+        ],
+        issues=[
+            MacroIssue(
+                theme=str(item["theme"]),
+                title=str(item["title"]),
+                state=str(item["state"]),
+                summary=str(item["summary"]),
+                triggers=[str(value) for value in item.get("triggers", [])],
+                source_gaps=[str(value) for value in item.get("source_gaps", [])],
+            )
+            for item in payload.get("issues", [])
+        ],
+        watchlist_impact=WatchlistImpact(
+            growth_ai=str(impact.get("growth_ai", "")),
+            cyclicals=str(impact.get("cyclicals", "")),
+            energy_defense=str(impact.get("energy_defense", "")),
+            korea=str(impact.get("korea", "")),
+        ),
+        data_gaps=[str(value) for value in payload.get("data_gaps", [])],
     )
 
 
