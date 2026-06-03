@@ -13,13 +13,24 @@ from dashboard.sample_data import SAMPLE_DASHBOARD
 DEFAULT_MARKET_INSIGHTS_DIR = Path(__file__).resolve().parents[3] / "02_Areas" / "Market_Insights"
 
 
-def load_market_insights_dashboard_input(
+def build_market_insights_payload(
     insights_dir: str | Path = DEFAULT_MARKET_INSIGHTS_DIR,
-) -> DashboardInput:
+) -> dict:
+    """Curated SAMPLE payload merged with tickers discovered in the vault.
+
+    Returns the raw payload dict (pre-parse) so callers like ``live.py`` can
+    overlay a real-data snapshot before parsing.
+    """
     payload = deepcopy(SAMPLE_DASHBOARD)
     insights = _collect_related_tickers(Path(insights_dir))
     payload["stocks"] = _merge_stocks(payload["stocks"], insights)
-    return parse_dashboard_input(payload)
+    return payload
+
+
+def load_market_insights_dashboard_input(
+    insights_dir: str | Path = DEFAULT_MARKET_INSIGHTS_DIR,
+) -> DashboardInput:
+    return parse_dashboard_input(build_market_insights_payload(insights_dir))
 
 
 def _collect_related_tickers(root: Path) -> dict[str, list[str]]:
