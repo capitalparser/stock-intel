@@ -1,4 +1,5 @@
 from dashboard.macro_state import build_market_regime
+from dashboard.macro_state import build_dual_regime
 
 
 def _ind(symbol, value, series, day=0.0):
@@ -58,3 +59,21 @@ def test_kr_risk_off_when_fx_and_sentiment_stress():
 def test_kr_has_no_oil_axis():
     out = build_market_regime([_ind("KOSPI", 2600.0, _band(2550, spread=80), day=0.4)], market="KR")
     assert all(a["dimension"] != "oil" for a in out["axis_reads"])
+
+
+def test_build_dual_regime_attaches_transitions():
+    us = [_ind("SPY", 760.0, _band(720, spread=40), day=0.5),
+          _ind("S5FI", 70.0, _band(60, spread=20)),
+          _ind("^VIX", 14.0, _band(15.0, spread=2))]
+    kr = [_ind("KOSPI", 2600.0, _band(2550, spread=80), day=0.4),
+          _ind("USDKRW=X", 1300.0, _band(1350, spread=80)),
+          _ind("VKOSPI", 16.0, _band(20, spread=6))]
+    history = [{"as_of": "2026-06-03",
+                "us": {"market": "US", "regime": "conditional", "axis_reads": []},
+                "kr": {"market": "KR", "regime": "risk-on", "axis_reads": []}}]
+    out = build_dual_regime(us, kr, history=history, as_of="2026-06-04")
+    assert out["as_of"] == "2026-06-04"
+    assert out["us"]["regime"] == "risk-on"
+    assert out["transitions"]["us"]["changed"] is True
+    assert out["transitions"]["us"]["from"] == "conditional"
+    assert out["transitions"]["kr"]["changed"] is False

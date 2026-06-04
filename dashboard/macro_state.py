@@ -343,3 +343,15 @@ def _next_action(regime: str) -> str:
         "conditional": "후보 압축",
         "risk-on": "가격 매력 있는 후보부터 검토",
     }[regime]
+
+
+from dashboard.regime_history import detect_transition  # noqa: E402
+
+
+def build_dual_regime(us_indicators, kr_indicators, *, history=None, as_of=None) -> dict:
+    history = history or []
+    us = build_market_regime(us_indicators, market="US")
+    kr = build_market_regime(kr_indicators, market="KR")
+    return {"as_of": as_of, "us": us, "kr": kr,
+            "transitions": {"us": detect_transition(history, us, "us"),
+                            "kr": detect_transition(history, kr, "kr")}}
