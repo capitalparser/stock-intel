@@ -42,13 +42,19 @@ percentile과 무관하게 강제 판정하는 구조적 위험선. 사용자(�
 - series < 30(`MIN_SERIES`)이면 percentile 산출 불가 → 가드레일만 적용, 가드레일도 미발동이면 `unavailable`(supportive로 단정 안 함).
 - **다중 심볼 축의 대표 percentile:** 한 축에 심볼이 여럿이면(US breadth=RSP/S5FI/QQQ/IWM 등) 축 state는 worst-state 심볼이 정하고, `axis_reads.pctile`도 **그 worst-state 심볼의 percentile**로 잡는다(동률이면 먼저 본 심볼). pctile↔state가 근거-결론으로 일치해야 함(code review 2026-06-04 should-fix).
 
-## KR 데이터 경로 (2026-06-04)
+## KR 데이터 경로 (2026-06-04, rev2)
 
-한국 국면 입력은 **KRX API 직연동**으로 간다(사용자 결정). pykrx 지수/펀더멘탈/외국인 순매수 엔드포인트는 **KRX_ID/KRX_PW 인증**이 있어야 동작함을 라이브로 확인. 이로써:
+한국 국면 입력은 **KRX OPEN API(공식 REST + 인증키)** 로 간다(사용자 결정). pykrx 웹로그인(`KRX_ID`/`KRX_PW` data.krx.co.kr 회원세션) 방식은 **폐기** — 웹세션 불안정·로그인 ID stdout 누출 때문. KRX OPEN API(`data-dbg.krx.co.kr/svc/apis/...`, `AUTH_KEY` 헤더)를 직접 호출한다.
 
-- 새 의존: `.env`에 `KRX_ID`/`KRX_PW` (민감정보 — 절대 커밋 금지, CLAUDE.md §7).
-- KR 국면 축: 외국인 순매수(KRX real) · 원화(USDKRW, yfinance) · VKOSPI(KRX 인증 후 ticker 가용성 재확인 필요 — 불가 시 KOSPI 실현변동성 대체) · KOSPI breadth(전종목 %>MA, KRX).
-- 운영 제약: KRX 세션은 봇이 네이버 fallback을 쓰는 바로 그 이유(불안정)다. KR 매크로 축은 KRX 실패 시 축 단위 graceful degradation(`확인 필요`) 필수.
+- 새 의존: `.env`에 `KRX_API_KEY`(민감 — 커밋 금지, §7). pykrx는 KR 매크로에서 쓰지 않는다(종목 레이어는 기존대로).
+- **KRX OPEN API 데이터셋 제약:** 지수(KOSPI/KOSPI200/KOSDAQ/채권/파생)·종목 일별매매·ETF/ETN·채권·파생·일반상품(석유/금)은 제공하나 **투자자별(외국인/기관) 순매수는 목록에 없음**.
+- **KR 국면 축(rev2):**
+  - sentiment(한국 변동성): KOSPI 지수 일별 → 실현변동성 산출. 파생상품지수 API에 VKOSPI 있으면 우선(plan에서 키로 확인).
+  - fx(원화): USDKRW=X (yfinance — KRX 외환 아님).
+  - breadth: **경량 프록시 = KOSPI vs KOSPI200 상대강도**(KRX 지수 API). 전종목 %>MA는 비용 과다로 비채택.
+  - flow(외국인 수급): KRX OPEN API 미제공 → **EWY(US상장 한국 ETF) 기반 외국인 시각 프록시(yfinance)**, 화면에 `프록시` 명시. 실제 투자자별 순매수는 v1.1(별도 소스).
+- **percentile 1년 baseline:** KRX OPEN API 일별 엔드포인트는 `basDd`(단일일) 단위라 1년 = ~250콜/시리즈. 초기 backfill은 캐시(`state/dashboard/cache/krx_series/`)에 1회 적재 후 일별 append. 동일 시리즈(KOSPI 지수)는 yfinance `^KS11` 1콜 1년으로 baseline 대체 가능 — plan에서 KRX 권위값(당일 read)과 yfinance baseline 하이브리드 허용.
+- 운영 제약: KRX OPEN API 실패 시 KR 축 단위 graceful degradation(`확인 필요`) 필수.
 
 ## 영향
 
