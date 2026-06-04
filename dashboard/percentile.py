@@ -27,3 +27,57 @@ def severity_rank(state: str) -> int:
 
 def worse_state(a: str, b: str) -> str:
     return a if _SEVERITY[a] >= _SEVERITY[b] else b
+
+
+WARN_HIGH_PCT = 0.85
+STRESS_HIGH_PCT = 0.95
+WARN_LOW_PCT = 0.15
+STRESS_LOW_PCT = 0.05
+
+
+@dataclass(frozen=True)
+class DimensionSpec:
+    dimension: str
+    label: str
+    direction: str
+    warn_guardrail: float | None = None
+    stress_guardrail: float | None = None
+
+
+def _percentile_state(spec: DimensionSpec, value: float, series) -> str:
+    pct = percentile_rank(series, value)
+    if pct is None:
+        return "unavailable"
+    if spec.direction == RISK_HIGH:
+        if pct >= STRESS_HIGH_PCT:
+            return "stressed"
+        if pct >= WARN_HIGH_PCT:
+            return "warning"
+        return "supportive"
+    if pct <= STRESS_LOW_PCT:
+        return "stressed"
+    if pct <= WARN_LOW_PCT:
+        return "warning"
+    return "supportive"
+
+
+def _guardrail_state(spec: DimensionSpec, value: float) -> str:
+    def hit(threshold: float | None) -> bool:
+        if threshold is None:
+            return False
+        return value >= threshold if spec.direction == RISK_HIGH else value <= threshold
+
+    if hit(spec.stress_guardrail):
+        return "stressed"
+    if hit(spec.warn_guardrail):
+        return "warning"
+    return "supportive"
+
+
+def dimension_state(spec: DimensionSpec, value: float, series) -> str:
+    pct_state = _percentile_state(spec, value, series)
+    guard_state = _guardrail_state(spec, value)
+    if pct_state == "unavailable":
+        # series 없음: 가드레일이 발동하면 그 state, 아니면 unavailable (supportive로 단정 안 함).
+        return guard_state if guard_state != "supportive" else "unavailable"
+    return worse_state(pct_state, guard_state)
