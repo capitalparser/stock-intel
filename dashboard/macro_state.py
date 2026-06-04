@@ -275,17 +275,21 @@ def build_market_regime(indicators: list[dict], *, market: str) -> dict:
                                "pctile": None, "read": f"{spec.label} 실데이터 미연결", "symbols": []})
             states[dim] = "unavailable"
             continue
+        # 대표 percentile은 state를 결정한 바로 그 심볼의 percentile로 잡는다
+        # (worst-state 심볼). 그래야 axis_reads의 pctile↔state가 근거-결론으로
+        # 일치한다 (code review 2026-06-04 should-fix). 동률이면 먼저 본 심볼 유지.
         worst = "supportive"
         rep_pct = None
+        rep_rank = -2  # "unavailable"(-1)보다 낮게 둬서 첫 유효 심볼이 항상 대표를 설정
         for it in items:
             val = _f(it.get("value"))
             if val is None:
                 continue
             st = dimension_state(spec, val, it.get("series") or [])
-            if rep_pct is None:
-                rep_pct = percentile_rank(it.get("series") or [], val)
-            if severity_rank(st) > severity_rank(worst):
+            if severity_rank(st) > rep_rank:
+                rep_rank = severity_rank(st)
                 worst = st
+                rep_pct = percentile_rank(it.get("series") or [], val)
         states[dim] = worst
         axis_reads.append({"dimension": dim, "label": spec.label, "state": worst,
                            "pctile": rep_pct, "read": _axis_read(spec.label, worst),

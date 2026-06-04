@@ -77,3 +77,17 @@ def test_build_dual_regime_attaches_transitions():
     assert out["transitions"]["us"]["changed"] is True
     assert out["transitions"]["us"]["from"] == "conditional"
     assert out["transitions"]["kr"]["changed"] is False
+
+
+def test_multi_symbol_axis_pctile_matches_state_symbol():
+    # US breadth = RSP(supportive) + S5FI(warning). 축 state는 worst(S5FI),
+    # 대표 pctile도 그 S5FI 값이어야 한다 (근거-결론 정합, code review should-fix).
+    indicators = [
+        _ind("SPY", 760.0, _band(720, spread=40), day=0.3),
+        _ind("RSP", 210.0, _band(200, spread=20)),   # mid -> supportive, pctile ~0.5
+        _ind("S5FI", 43.5, _band(60, spread=20)),    # 0.10 -> warning
+    ]
+    out = build_market_regime(indicators, market="US")
+    breadth = next(a for a in out["axis_reads"] if a["dimension"] == "breadth")
+    assert breadth["state"] == "warning"
+    assert breadth["pctile"] is not None and breadth["pctile"] <= 0.15  # S5FI 값이지 RSP(0.5) 아님
