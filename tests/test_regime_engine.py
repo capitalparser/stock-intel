@@ -109,3 +109,18 @@ def test_kr_foreign_net_proxy_metadata_surfaces_in_axis_read():
     flow = next(a for a in out["axis_reads"] if a["dimension"] == "flow")
     assert flow["source_kind"] == "proxy"
     assert flow["read"] == "EWY 프록시 — 실제 외국인 순매수 아님"
+
+
+def test_axis_proxy_label_preserved_when_proxy_not_worst():
+    # 한 축에 proxy(supportive)와 non-proxy(warning) 공존, worst가 non-proxy여도
+    # proxy 라벨이 사라지면 안 됨 (code review 2026-06-04 should-fix; v1.1 flow축 대비).
+    indicators = [
+        _ind("SPY", 760.0, _band(720, spread=40), day=0.3),
+        {"symbol": "S5FI", "value": 43.5, "series": _band(60, spread=20), "day_change_pct": 0.0},
+        {"symbol": "RSP", "value": 210.0, "series": _band(200, spread=20), "day_change_pct": 0.0,
+         "source_kind": "proxy", "read": "테스트 프록시"},
+    ]
+    out = build_market_regime(indicators, market="US")
+    breadth = next(a for a in out["axis_reads"] if a["dimension"] == "breadth")
+    assert breadth["state"] == "warning"           # S5FI(non-proxy)가 worst
+    assert breadth.get("source_kind") == "proxy"   # 그래도 proxy 라벨 보존

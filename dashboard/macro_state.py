@@ -294,10 +294,18 @@ def build_market_regime(indicators: list[dict], *, market: str) -> dict:
                 rep_item = it
         states[dim] = worst
         read = _axis_read(spec.label, worst)
+        # proxy 라벨은 축의 *어느* 심볼이든 proxy면 보존한다(worst-state 심볼이 proxy가
+        # 아니어도 사라지지 않게) — code review 2026-06-04 should-fix. v1.1에서 flow 축에
+        # 실제 외국인 순매수(non-proxy)가 EWY(proxy)와 함께 들어올 때를 대비.
         source_kind = None
         if rep_item is not None and rep_item.get("source_kind"):
             source_kind = str(rep_item.get("source_kind"))
             read = str(rep_item.get("read") or read)
+        else:
+            proxy_item = next((it for it in items if it.get("source_kind") == "proxy"), None)
+            if proxy_item is not None:
+                source_kind = "proxy"
+                read = str(proxy_item.get("read") or read)
         axis_read = {"dimension": dim, "label": spec.label, "state": worst,
                      "pctile": rep_pct, "read": read,
                      "symbols": [str(it.get("symbol")) for it in items]}

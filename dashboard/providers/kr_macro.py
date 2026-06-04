@@ -12,7 +12,7 @@ from typing import Any
 
 
 def realized_vol(closes: list[float], window: int = 20) -> float:
-    use = [float(c) for c in closes[-(window + 1):] if c]
+    use = [float(c) for c in closes[-(window + 1):] if c is not None]
     if len(use) < 3:
         return 0.0
     rets = [use[i] / use[i - 1] - 1 for i in range(1, len(use))]
@@ -25,7 +25,7 @@ def relative_strength(kospi: list[float], kospi200: list[float], window: int = 2
     """KOSPI vs KOSPI200 relative strength, scaled 0..100."""
 
     def ret(series: list[float]) -> float:
-        use = [float(c) for c in series if c]
+        use = [float(c) for c in series if c is not None]
         if len(use) <= window:
             return 0.0
         return use[-1] / use[-window - 1] - 1
