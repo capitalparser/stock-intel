@@ -716,5 +716,21 @@ Plan 1과 동일하게 (b) Codex plan 리뷰 → 차이 머지 → Codex 구현 
 
 **A-10 (R-10, nit) — fixture 구체화.** Task 6·7의 `_minimal_dashboard_payload`/`dual_regime_dashboard`는 plan에 완전한 코드로 제공하지 말고, 구현자가 **기존 `tests/test_dashboard_models.py`·`tests/test_dashboard_render.py`의 Dashboard 생성 픽스처를 재사용**하고 거기에 `dual_regime`만 채우라고 명시(기존 픽스처가 진실 소스). 새 픽스처를 발명하지 말 것.
 
+## Cross-model review 반영 v3 (2026-06-05) — KRX OPEN API → yfinance ETF 피벗 (**v2보다 우선**)
+
+KRX OPEN API가 401(개별 API 권한)로 막히고, v1 KR 경량 축엔 KRX 고유 가치가 없음을 확인. **KR spine을 yfinance ETF로 피벗** → BLOCKING(KRX_API_KEY) 제거, Task 전체 key-free. 근거 [ADR-0001 KR 데이터 경로 rev3].
+
+- **B-01 BLOCKING 해제:** `KRX_API_KEY` 선행조건 삭제. Task 1·2(KRX 클라이언트·시리즈 캐시)는 **v1 비채택**(v1.1 옵션). A-01·A-02·A-06의 KRX 부분 무효.
+- **B-02 KR 데이터(fetch_kr_quotes, Task 5):** yfinance만 사용. 심볼: KODEX200 `069500.KS`, KODEX코스닥150 `229200.KS`, `USDKRW=X`, `EWY`. 각 `period="1y"` 1콜. `^KS11`/`^KS200`은 NaN이라 금지.
+- **B-03 Task 4 build_kr_indicators 조정(부호 정확성):** trend/RV leg와 breadth leg 분리.
+  - `quotes["KOSPI"]` = KODEX200(069500) → `KOSPI`(trend/day_change) + `KOSPI_RV`(실현변동성) indicator.
+  - breadth는 별도 leg: `quotes["KOSDAQ"]`(229200) vs `quotes["KOSPI"]`(069500) → `KOSPI_BREADTH = relative_strength(kosdaq_closes, kospi_closes)`. **leg 순서 (KOSDAQ, KOSPI)** — 코스닥 우위(risk-on/광범위)→rs↑→breadth supportive(RISK_LOW와 부호 일치). 테스트: 코스닥 outperform 시계열 → breadth state `supportive`/높은 pctile 검증.
+  - `USDKRW=X`→`USDKRW=X`(fx), `EWY`→`FOREIGN_NET`(flow proxy, source_kind="proxy" 유지).
+- **B-04 Task 5 snapshot:** A-03(persist_regime_history opt-in) 유지. `fetch_kr_quotes`가 yfinance 4심볼 try/except로 누락 허용(축 단위 graceful degradation). A-09 강화 테스트 유지.
+- **B-05 Task 8(구 _derive_regime 제거)·Task 9(build 스모크):** 이제 key 불필요 → 정상 진행. Task 9 스모크는 yfinance 라이브로.
+- **B-06 percentile baseline:** A-06 정합검증(KRX↔yfinance) 무효 — 단일 소스(yfinance) 통일이므로 series 혼합 위험 없음.
+
+**남은 key-free 실행 순서:** Task 4 조정(B-03) → Task 5(yfinance fetch_kr_quotes + snapshot 듀얼, B-02/B-04) → Task 8(구 경로 제거) → Task 9(build 스모크).
+
 ## 다음 Plan
-Plan 3 catalyst / 4 universe·KR스크린 / 5 봇 시그니처 / 6 밸류에이션 기대치(forward-pe 흡수) / 7 정책 렌즈.
+Plan 3 catalyst / 4 universe·KR스크린 / 5 봇 시그니처 / 6 밸류에이션 기대치(forward-pe 흡수) / 7 정책 렌즈. (v1.1: KRX OPEN API 권위값·진짜 외국인 순매수(네이버)·전종목 breadth.)

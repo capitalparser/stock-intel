@@ -32,6 +32,15 @@ percentile과 무관하게 강제 판정하는 구조적 위험선. 사용자(�
 - oil: Brent ≥ 100 / WTI ≥ 95 → stressed (plan에서 재확인)
 - breadth·commodities: 절대 가드레일 없음, percentile만.
 
+## KR 데이터 경로 rev3 (2026-06-05) — KRX OPEN API → yfinance ETF 피벗
+
+KRX OPEN API는 호출이 401(개별 API 서비스 권한 문제, 운영·승인 부담)로 막혀, v1 KR 경량 축에 추가 가치가 없음을 확인(필요 데이터 = 지수 일별값뿐, login-free 소스로 충분). **KR 데이터 spine을 yfinance ETF로 피벗**:
+- yfinance 지수 심볼 `^KS11`/`^KS200`은 최신 종가 NaN으로 불안정 → **유동 ETF 사용**.
+- 한국 추세·실현변동성: **KODEX200 ETF `069500.KS`**(KOSPI200 추종, 1년 series 깨끗).
+- breadth(시장 내부 참여): **`relative_strength(KODEX코스닥150 229200.KS, KODEX200 069500.KS)`** — 코스닥(소형·성장) 우위 = risk-on/광범위 참여 = breadth 양호. **leg 순서 = (KOSDAQ, KOSPI)** 여야 RISK_LOW와 부호 일치(코스닥 우위→rs↑→supportive).
+- fx(원화): `USDKRW=X`. flow(외국인): `EWY` 프록시.
+- **KRX OPEN API·KRX_API_KEY는 v1에서 비채택**(키/승인 불필요). 진짜 외국인 순매수(네이버 시장전체 투자자별)·전종목 breadth·KRX 권위 일별값은 v1.1 옵션.
+
 ## Percentile 밴드 (2026-06-04 ratified)
 
 축 state를 percentile로 매핑하는 컷오프(Plan 1에서 확정, 여기 ratify):
