@@ -281,6 +281,7 @@ def build_market_regime(indicators: list[dict], *, market: str) -> dict:
         worst = "supportive"
         rep_pct = None
         rep_rank = -2  # "unavailable"(-1)보다 낮게 둬서 첫 유효 심볼이 항상 대표를 설정
+        rep_item = None
         for it in items:
             val = _f(it.get("value"))
             if val is None:
@@ -290,10 +291,19 @@ def build_market_regime(indicators: list[dict], *, market: str) -> dict:
                 rep_rank = severity_rank(st)
                 worst = st
                 rep_pct = percentile_rank(it.get("series") or [], val)
+                rep_item = it
         states[dim] = worst
-        axis_reads.append({"dimension": dim, "label": spec.label, "state": worst,
-                           "pctile": rep_pct, "read": _axis_read(spec.label, worst),
-                           "symbols": [str(it.get("symbol")) for it in items]})
+        read = _axis_read(spec.label, worst)
+        source_kind = None
+        if rep_item is not None and rep_item.get("source_kind"):
+            source_kind = str(rep_item.get("source_kind"))
+            read = str(rep_item.get("read") or read)
+        axis_read = {"dimension": dim, "label": spec.label, "state": worst,
+                     "pctile": rep_pct, "read": read,
+                     "symbols": [str(it.get("symbol")) for it in items]}
+        if source_kind:
+            axis_read["source_kind"] = source_kind
+        axis_reads.append(axis_read)
 
     regime = _compose_regime(market, index_day, states)
     return {"market": market, "regime": regime, "why_it_matters": _why(market, regime),

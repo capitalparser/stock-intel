@@ -91,3 +91,21 @@ def test_multi_symbol_axis_pctile_matches_state_symbol():
     breadth = next(a for a in out["axis_reads"] if a["dimension"] == "breadth")
     assert breadth["state"] == "warning"
     assert breadth["pctile"] is not None and breadth["pctile"] <= 0.15  # S5FI 값이지 RSP(0.5) 아님
+
+
+def test_kr_foreign_net_proxy_metadata_surfaces_in_axis_read():
+    indicators = [
+        _ind("KOSPI", 2600.0, _band(2550, spread=80), day=0.4),
+        {
+            "symbol": "FOREIGN_NET",
+            "value": 65.9,
+            "series": _band(60, spread=10),
+            "day_change_pct": 0.0,
+            "source_kind": "proxy",
+            "read": "EWY 프록시 — 실제 외국인 순매수 아님",
+        },
+    ]
+    out = build_market_regime(indicators, market="KR")
+    flow = next(a for a in out["axis_reads"] if a["dimension"] == "flow")
+    assert flow["source_kind"] == "proxy"
+    assert flow["read"] == "EWY 프록시 — 실제 외국인 순매수 아님"
