@@ -132,6 +132,7 @@ class DashboardInput:
     macro_state: MacroState | None
     lenses: list[Lens]
     stocks: list[StockInput]
+    dual_regime: DualRegime | None = None
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ class Dashboard:
     macro_state: MacroState | None
     lenses: list[Lens]
     candidates: list[Candidate]
+    dual_regime: DualRegime | None = None
 
 
 def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
@@ -231,6 +233,7 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
         macro_state=_parse_macro_state(payload.get("macro_state")),
         lenses=lenses,
         stocks=stocks,
+        dual_regime=parse_dual_regime(payload.get("dual_regime")),
     )
 
 
@@ -297,6 +300,7 @@ class AxisRead:
     pctile: float | None
     read: str
     symbols: list[str]
+    source_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -338,6 +342,7 @@ def _parse_market_regime(payload: dict[str, Any]) -> MarketRegimeRead:
                 dimension=str(a["dimension"]), label=str(a["label"]), state=str(a["state"]),
                 pctile=(None if a.get("pctile") is None else float(a["pctile"])),
                 read=str(a.get("read", "")), symbols=[str(s) for s in a.get("symbols", [])],
+                source_kind=(None if a.get("source_kind") is None else str(a["source_kind"])),
             )
             for a in payload.get("axis_reads", [])
         ],

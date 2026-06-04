@@ -250,3 +250,45 @@ def test_parse_dual_regime():
 
 def test_parse_dual_regime_none():
     assert parse_dual_regime(None) is None
+
+
+def test_parse_dashboard_input_accepts_dual_regime_payload():
+    payload = {
+        "as_of": "2026-06-04",
+        "price_time": "2026-06-04T00:00:00+00:00",
+        "regime": {
+            "verdict": "conditional",
+            "risk_appetite": "neutral",
+            "rates": "stable",
+            "dollar": "stable",
+            "volatility": "normal",
+            "notes": [],
+        },
+        "market_indicators": [],
+        "dual_regime": {
+            "as_of": "2026-06-04",
+            "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
+                   "next_action": "검토", "axis_reads": [], "data_gaps": []},
+            "kr": {"market": "KR", "regime": "conditional", "why_it_matters": "KR",
+                   "next_action": "압축",
+                   "axis_reads": [{"dimension": "flow", "label": "외국인 수급",
+                                   "state": "supportive", "pctile": 0.7,
+                                   "read": "EWY 프록시 — 실제 외국인 순매수 아님",
+                                   "symbols": ["FOREIGN_NET"], "source_kind": "proxy"}],
+                   "data_gaps": []},
+            "transitions": {
+                "us": {"changed": False, "from": "risk-on", "to": "risk-on",
+                       "streak": 2, "whipsaw": False, "axis_changes": []},
+                "kr": {"changed": True, "from": "risk-off", "to": "conditional",
+                       "streak": 1, "whipsaw": False, "axis_changes": []},
+            },
+        },
+        "lenses": [],
+        "stocks": [],
+    }
+
+    parsed = parse_dashboard_input(payload)
+
+    assert parsed.dual_regime is not None
+    assert parsed.dual_regime.kr.regime == "conditional"
+    assert parsed.dual_regime.kr.axis_reads[0].source_kind == "proxy"

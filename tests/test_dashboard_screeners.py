@@ -174,3 +174,38 @@ def test_blocked_and_missing_evidence_control_status():
     statuses = {candidate.ticker: candidate.status for candidate in dashboard.candidates}
     assert statuses["KRX:005930"] == CandidateStatus.BLOCKED
     assert statuses["GAP"] == CandidateStatus.RESEARCH
+
+
+def test_build_dashboard_passes_dual_regime():
+    parsed = parse_dashboard_input(
+        {
+            "as_of": "2026-06-04",
+            "regime": {
+                "verdict": "conditional",
+                "risk_appetite": "neutral",
+                "rates": "stable",
+                "dollar": "stable",
+                "volatility": "normal",
+                "notes": [],
+            },
+            "dual_regime": {
+                "as_of": "2026-06-04",
+                "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
+                       "next_action": "검토", "axis_reads": [], "data_gaps": []},
+                "kr": {"market": "KR", "regime": "conditional", "why_it_matters": "KR",
+                       "next_action": "압축", "axis_reads": [], "data_gaps": []},
+                "transitions": {
+                    "us": {"changed": False, "from": "risk-on", "to": "risk-on",
+                           "streak": 2, "whipsaw": False, "axis_changes": []},
+                    "kr": {"changed": True, "from": "risk-off", "to": "conditional",
+                           "streak": 1, "whipsaw": False, "axis_changes": []},
+                },
+            },
+            "lenses": [],
+            "stocks": [],
+        }
+    )
+
+    dashboard = build_dashboard(parsed)
+
+    assert dashboard.dual_regime is parsed.dual_regime

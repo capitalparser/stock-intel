@@ -80,6 +80,9 @@ def overlay_snapshot(payload: dict, snapshot: dict) -> dict:
     macro_state = macro.get("macro_state")
     if macro_state and macro_state.get("current_state"):
         payload["macro_state"] = deepcopy(macro_state)
+    dual_regime = macro.get("dual_regime")
+    if dual_regime and dual_regime.get("us") and dual_regime.get("kr"):
+        payload["dual_regime"] = deepcopy(dual_regime)
 
     payload["as_of"] = snapshot.get("as_of", payload.get("as_of"))
     if snapshot.get("generated_at"):

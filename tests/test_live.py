@@ -56,6 +56,19 @@ def _snapshot():
                 "watchlist_impact": {},
                 "data_gaps": [],
             },
+            "dual_regime": {
+                "as_of": "2026-05-30",
+                "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
+                       "next_action": "검토", "axis_reads": [], "data_gaps": []},
+                "kr": {"market": "KR", "regime": "conditional", "why_it_matters": "KR",
+                       "next_action": "압축", "axis_reads": [], "data_gaps": []},
+                "transitions": {
+                    "us": {"changed": False, "from": "risk-on", "to": "risk-on",
+                           "streak": 2, "whipsaw": False, "axis_changes": []},
+                    "kr": {"changed": True, "from": "risk-off", "to": "conditional",
+                           "streak": 1, "whipsaw": False, "axis_changes": []},
+                },
+            },
             "errors": [],
         },
         "stocks": {
@@ -90,6 +103,7 @@ def test_overlay_replaces_quant_fields_and_macro():
     assert payload["regime"]["verdict"] == "risk-on"
     assert payload["market_indicators"][0]["symbol"] == "SPY"
     assert payload["macro_state"]["current_state"] == "fragile rally"
+    assert payload["dual_regime"]["kr"]["regime"] == "conditional"
     assert payload["as_of"] == "2026-05-30"
 
 
@@ -113,6 +127,8 @@ def test_load_live_uses_injected_snapshot():
     source_input, used_snapshot = load_live_dashboard_input(snapshot=_snapshot())
     assert used_snapshot is True
     assert source_input.as_of == "2026-05-30"
+    assert source_input.dual_regime is not None
+    assert source_input.dual_regime.kr.regime == "conditional"
 
 
 def test_universe_from_payload_uses_peer_group():
