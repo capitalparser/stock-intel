@@ -6,6 +6,59 @@ from dashboard.market_insights import load_market_insights_dashboard_input
 from scripts.render_lens_dashboard import write_dashboard_reports
 
 
+def _dual_regime_dashboard():
+    dashboard_input = parse_dashboard_input(
+        {
+            "as_of": "2026-06-04",
+            "price_time": "2026-06-04T00:00:00+09:00",
+            "regime": {
+                "verdict": "conditional",
+                "risk_appetite": "neutral",
+                "rates": "stable",
+                "dollar": "stable",
+                "volatility": "normal",
+                "notes": [],
+            },
+            "market_indicators": [],
+            "dual_regime": {
+                "as_of": "2026-06-04",
+                "us": {
+                    "market": "US",
+                    "regime": "risk-on",
+                    "why_it_matters": "미국 주요 축이 위험자산에 우호적",
+                    "next_action": "가격 매력 후보부터 검토",
+                    "axis_reads": [
+                        {"dimension": "breadth", "label": "시장 폭", "state": "supportive",
+                         "pctile": 0.72, "read": "시장 폭 우호", "symbols": ["S5FI"]}
+                    ],
+                    "data_gaps": [],
+                },
+                "kr": {
+                    "market": "KR",
+                    "regime": "fragile rally",
+                    "why_it_matters": "한국 지수는 강하지만 수급 프록시 확인 필요",
+                    "next_action": "국장 후보 압축",
+                    "axis_reads": [
+                        {"dimension": "flow", "label": "외국인 수급", "state": "warning",
+                         "pctile": 0.18, "read": "EWY 프록시 — 실제 외국인 순매수 아님",
+                         "symbols": ["FOREIGN_NET"], "source_kind": "proxy"}
+                    ],
+                    "data_gaps": [],
+                },
+                "transitions": {
+                    "us": {"changed": False, "from": "risk-on", "to": "risk-on",
+                           "streak": 3, "whipsaw": False, "axis_changes": []},
+                    "kr": {"changed": True, "from": "conditional", "to": "fragile rally",
+                           "streak": 1, "whipsaw": True, "axis_changes": []},
+                },
+            },
+            "lenses": [],
+            "stocks": [],
+        }
+    )
+    return build_dashboard(dashboard_input)
+
+
 def test_render_dashboard_html_contains_core_sections_and_no_raw_json():
     dashboard = build_dashboard(load_sample_dashboard_input())
 
@@ -73,6 +126,22 @@ def test_render_dashboard_markdown_contains_macro_state_brief():
     assert "## 매크로 현재 상태" in text
     assert "## 오늘의 주요 이슈" in text
     assert "## 종목 후보 영향" in text
+
+
+def test_markdown_renders_dual_regime():
+    md = render_dashboard_markdown(_dual_regime_dashboard())
+    assert "미국 국면" in md and "한국 국면" in md
+    assert "영업일째" in md or "→" in md
+    assert "프록시" in md
+
+
+def test_html_renders_dual_regime():
+    html = render_dashboard_html(
+        _dual_regime_dashboard(), db_path="/tmp/missing-stock-intel-state.db"
+    )
+    assert "한국 국면" in html
+    assert "잠정 전이" in html or "영업일째" in html
+    assert "프록시" in html
 
 
 def test_render_dashboard_uses_korean_company_name_as_primary_for_kr_stocks():

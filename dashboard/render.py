@@ -431,6 +431,11 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         f"기준일: {dashboard.as_of}",
         f"가격 기준: {dashboard.price_time}",
         "",
+    ]
+    if dashboard.dual_regime:
+        lines.extend(_dual_regime_markdown_lines(dashboard))
+        lines.append("")
+    lines += [
         "## 시장 국면",
         f"- 현재 판단: {_regime_value(dashboard.regime.verdict)}",
         f"- 위험자산 선호: {_regime_value(dashboard.regime.risk_appetite)}",
@@ -594,6 +599,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
   <span class="topbar-badge">{risk_kpi}</span>
 </header>
 <main>
+{_dual_regime_html(dashboard)}
 {_macro_state_html(dashboard)}
   <div class="sh" style="margin-top:0"><h2>시장 국면</h2></div>
   <div class="macro-strip">
@@ -650,6 +656,104 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
 
 
 # ── New dark-mode helpers ──────────────────────────────────────────────────
+
+def _dual_regime_markdown_lines(dashboard: Dashboard) -> list[str]:
+    dual = dashboard.dual_regime
+    if not dual:
+        return []
+    lines: list[str] = []
+    for title, market, key in (("미국 국면", dual.us, "us"), ("한국 국면", dual.kr, "kr")):
+        transition = dual.transitions.get(key)
+        lines += [
+            f"## {title}",
+            f"- 현재: {_regime_label_kr(market.regime)}",
+            f"- {_transition_badge_text(transition)}",
+            f"- 왜: {market.why_it_matters}",
+            f"- 다음: {market.next_action}",
+        ]
+        for axis in market.axis_reads:
+            proxy = " · 프록시" if axis.source_kind == "proxy" else ""
+            lines.append(
+                f"- {axis.label}: {_axis_state_label(axis.state)} "
+                f"({_pctile_read(axis.pctile)}){proxy} · {axis.read}"
+            )
+    return lines
+
+
+def _dual_regime_html(dashboard: Dashboard) -> str:
+    dual = dashboard.dual_regime
+    if not dual:
+        return ""
+    return f"""
+  <div class="sh" style="margin-top:0"><h2>한미 듀얼 국면</h2></div>
+  <div class="heatmap">
+{_market_regime_html("미국 국면", dual.us, dual.transitions.get("us"))}
+{_market_regime_html("한국 국면", dual.kr, dual.transitions.get("kr"))}
+  </div>
+"""
+
+
+def _market_regime_html(title: str, market, transition) -> str:
+    axes = "\n".join(_axis_read_html(axis) for axis in market.axis_reads)
+    whipsaw = " h-mid" if getattr(transition, "whipsaw", False) else ""
+    return f"""    <div class="hcell h-neu{whipsaw}">
+      <div class="hcell-name">{escape(title)} · {escape(_regime_label_kr(market.regime))}</div>
+      <div class="hcell-badges">
+        <span class="hbadge bmid">{escape(_transition_badge_text(transition))}</span>
+      </div>
+      <div class="d-thesis">{escape(market.why_it_matters)}</div>
+      <div class="hcell-risk">다음 행동: {escape(market.next_action)}</div>
+      <div class="regime-notes">
+{axes}
+      </div>
+    </div>"""
+
+
+def _axis_read_html(axis) -> str:
+    proxy = ' <span class="hbadge bneu">프록시</span>' if axis.source_kind == "proxy" else ""
+    return (
+        f'        <div class="regime-note">{escape(axis.label)}: '
+        f'{escape(_axis_state_label(axis.state))} · {escape(_pctile_read(axis.pctile))}'
+        f'{proxy}<br><span class="hcell-risk">{escape(axis.read)}</span></div>'
+    )
+
+
+def _transition_badge_text(transition) -> str:
+    if transition is None:
+        return "전이 이력 확인 필요"
+    if transition.changed:
+        before = _regime_label_kr(transition.from_regime or "이전")
+        after = _regime_label_kr(transition.to)
+        base = f"어제 {before} → 오늘 {after}"
+        if transition.whipsaw:
+            return f"{base} · 잠정 전이 — 변동 큼"
+        return base
+    return f"{transition.streak}영업일째 {_regime_label_kr(transition.to)}"
+
+
+def _regime_label_kr(regime: str) -> str:
+    return {
+        "risk-on": "위험 선호",
+        "conditional": "조건부",
+        "fragile rally": "취약한 랠리",
+        "risk-off": "위험 회피",
+    }.get(regime, regime)
+
+
+def _axis_state_label(state: str) -> str:
+    return {
+        "supportive": "우호",
+        "warning": "경고",
+        "stressed": "위험",
+        "unavailable": "확인 필요",
+    }.get(state, state)
+
+
+def _pctile_read(value: float | None) -> str:
+    if value is None:
+        return "백분위 확인 필요"
+    return f"백분위 {value * 100:.0f}%"
+
 
 def _macro_state_html(dashboard: Dashboard) -> str:
     state = dashboard.macro_state
