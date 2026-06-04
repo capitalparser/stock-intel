@@ -59,6 +59,8 @@ def fetch_macro() -> dict:
                 "price": round(q["price"], 2),
                 "day_change_pct": round(chg, 2) if chg is not None else 0.0,
                 "read": _indicator_read(symbol, group, chg),
+                "value": round(q["price"], 2),
+                "series": q.get("closes") or [],
             }
         )
 
@@ -171,7 +173,7 @@ def _load_quotes(symbols: list[str]) -> dict[str, dict]:
     import yfinance as yf  # lazy
 
     data = yf.download(
-        symbols, period="2mo", interval="1d", progress=False, group_by="ticker"
+        symbols, period="1y", interval="1d", progress=False, group_by="ticker"
     )
     out: dict[str, dict] = {}
     for sym in symbols:
@@ -185,5 +187,6 @@ def _load_quotes(symbols: list[str]) -> dict[str, dict]:
             "price": closes[-1],
             "day_change_pct": day_change_pct(closes),
             "return_pct": trailing_return_pct(closes, lookback=21),
+            "closes": closes,
         }
     return out

@@ -112,3 +112,17 @@ def test_fetch_macro_includes_macro_state_from_expanded_indicators(monkeypatch):
     assert payload["macro_state"]["current_state"] == "fragile rally"
     assert any(item["symbol"] == "S5FI" for item in payload["market_indicators"])
     assert any(item["symbol"] == "BZ=F" for item in payload["market_indicators"])
+
+
+def test_fetch_macro_indicators_carry_series(monkeypatch):
+    import dashboard.providers.macro as m
+
+    def fake_load(symbols):
+        return {s: {"price": 100.0, "day_change_pct": 0.5, "return_pct": 1.0,
+                    "closes": [90.0 + i for i in range(60)]} for s in symbols}
+
+    monkeypatch.setattr(m, "_load_quotes", fake_load)
+    out = m.fetch_macro()
+    ind = out["market_indicators"][0]
+    assert "value" in ind and "series" in ind
+    assert len(ind["series"]) == 60
