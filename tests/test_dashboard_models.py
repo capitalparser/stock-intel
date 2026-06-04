@@ -1,8 +1,10 @@
 from dashboard.models import (
     CandidateStatus,
     DashboardInput,
+    DualRegime,
     LensKind,
     parse_dashboard_input,
+    parse_dual_regime,
 )
 from dashboard.sample_data import load_sample_dashboard_input
 from dashboard.market_insights import load_market_insights_dashboard_input
@@ -219,3 +221,32 @@ def test_market_insights_loader_builds_filled_korean_company_card(tmp_path):
     assert any("전력" in item for item in stock.bull_case)
     assert any("가격" in item or "실적" in item for item in stock.gaps)
     assert stock.next_action.startswith("최근 가격")
+
+
+def test_parse_dual_regime():
+    payload = {
+        "as_of": "2026-06-04",
+        "us": {"market": "US", "regime": "fragile rally", "why_it_matters": "…",
+               "next_action": "후보 압축",
+               "axis_reads": [{"dimension": "breadth", "label": "시장 폭",
+                               "state": "warning", "pctile": 0.1, "read": "…", "symbols": ["S5FI"]}],
+               "data_gaps": []},
+        "kr": {"market": "KR", "regime": "risk-off", "why_it_matters": "…",
+               "next_action": "방어 전환 감시", "axis_reads": [], "data_gaps": ["원화"]},
+        "transitions": {
+            "us": {"changed": True, "from": "risk-on", "to": "fragile rally",
+                   "streak": 1, "whipsaw": True, "axis_changes": []},
+            "kr": {"changed": False, "from": "risk-off", "to": "risk-off",
+                   "streak": 3, "whipsaw": False, "axis_changes": []}}}
+    dual = parse_dual_regime(payload)
+    assert isinstance(dual, DualRegime)
+    assert dual.us.regime == "fragile rally"
+    assert dual.us.axis_reads[0].state == "warning"
+    assert dual.transitions["us"].whipsaw is True
+    assert dual.transitions["kr"].streak == 3
+    assert dual.transitions["us"].from_regime == "risk-on"
+    assert dual.kr.data_gaps == ["원화"]
+
+
+def test_parse_dual_regime_none():
+    assert parse_dual_regime(None) is None

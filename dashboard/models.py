@@ -287,3 +287,79 @@ def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+@dataclass(frozen=True)
+class AxisRead:
+    dimension: str
+    label: str
+    state: str
+    pctile: float | None
+    read: str
+    symbols: list[str]
+
+
+@dataclass(frozen=True)
+class MarketRegimeRead:
+    market: str
+    regime: str
+    why_it_matters: str
+    next_action: str
+    axis_reads: list[AxisRead]
+    data_gaps: list[str]
+
+
+@dataclass(frozen=True)
+class RegimeTransition:
+    changed: bool
+    to: str
+    streak: int
+    whipsaw: bool
+    from_regime: str | None
+    axis_changes: list[dict]
+
+
+@dataclass(frozen=True)
+class DualRegime:
+    as_of: str | None
+    us: MarketRegimeRead
+    kr: MarketRegimeRead
+    transitions: dict[str, RegimeTransition]
+
+
+def _parse_market_regime(payload: dict[str, Any]) -> MarketRegimeRead:
+    return MarketRegimeRead(
+        market=str(payload["market"]),
+        regime=str(payload["regime"]),
+        why_it_matters=str(payload.get("why_it_matters", "")),
+        next_action=str(payload.get("next_action", "")),
+        axis_reads=[
+            AxisRead(
+                dimension=str(a["dimension"]), label=str(a["label"]), state=str(a["state"]),
+                pctile=(None if a.get("pctile") is None else float(a["pctile"])),
+                read=str(a.get("read", "")), symbols=[str(s) for s in a.get("symbols", [])],
+            )
+            for a in payload.get("axis_reads", [])
+        ],
+        data_gaps=[str(g) for g in payload.get("data_gaps", [])],
+    )
+
+
+def _parse_transition(payload: dict[str, Any]) -> RegimeTransition:
+    return RegimeTransition(
+        changed=bool(payload["changed"]), to=str(payload["to"]),
+        streak=int(payload["streak"]), whipsaw=bool(payload["whipsaw"]),
+        from_regime=(None if payload.get("from") is None else str(payload["from"])),
+        axis_changes=[dict(c) for c in payload.get("axis_changes", [])],
+    )
+
+
+def parse_dual_regime(payload: dict[str, Any] | None) -> DualRegime | None:
+    if not payload:
+        return None
+    return DualRegime(
+        as_of=(None if payload.get("as_of") is None else str(payload["as_of"])),
+        us=_parse_market_regime(payload["us"]),
+        kr=_parse_market_regime(payload["kr"]),
+        transitions={k: _parse_transition(v) for k, v in (payload.get("transitions") or {}).items()},
+    )
