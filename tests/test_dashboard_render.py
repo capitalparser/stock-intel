@@ -257,6 +257,59 @@ def test_render_shows_independence_badges():
     assert '"cls": "bneu"' in html
 
 
+def test_render_shows_catalyst():
+    dashboard_input = parse_dashboard_input(
+        {
+            "as_of": "2026-06-05",
+            "price_time": "2026-06-05T00:00:00+09:00",
+            "market_indicators": [],
+            "lenses": [],
+            "stocks": [
+                {
+                    "ticker": "NVDA",
+                    "company": "NVIDIA",
+                    "sector": "Semis",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 50,
+                        "quality": 50,
+                        "growth": 50,
+                        "revision": 50,
+                        "momentum": 50,
+                    },
+                    "evidence": ["seed"],
+                    "gaps": [],
+                    "catalysts": [
+                        {
+                            "type": "earnings",
+                            "direction": "upcoming",
+                            "date": "2026-06-17",
+                            "days": 12,
+                            "label": "실적 D-12",
+                        },
+                        {
+                            "type": "supply_contract",
+                            "direction": "recent",
+                            "date": "2026-06-01",
+                            "days": 4,
+                            "label": "공급계약 (6/1)",
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    dashboard = build_dashboard(dashboard_input)
+
+    markdown = render_dashboard_markdown(dashboard)
+    html = render_dashboard_html(dashboard, db_path="/tmp/missing-stock-intel-state.db")
+
+    assert "다가오는: 실적 D-12" in markdown
+    assert "최근: 공급계약 (6/1)" in markdown
+    assert "다가오는: 실적 D-12" in html
+    assert "최근: 공급계약 (6/1)" in html
+
+
 def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
     # Force curated sample for a deterministic as_of date (no snapshot dependency).
     html_path, md_path, used_snapshot = write_dashboard_reports(

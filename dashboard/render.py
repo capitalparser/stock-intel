@@ -172,6 +172,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 80px; }
   border-radius: 100px; border: 1px solid var(--border);
   color: var(--muted); background: rgba(255,255,255,0.03);
 }
+.cc-catalyst { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
 .twrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 thead tr { background: var(--surface-2); }
@@ -295,6 +296,7 @@ function renderCards() {
     const id = 'sp-'+c.ticker;
     const lh = (c.lenses||[]).map(l=>`<span class="ltag">${l}</span>`).join('');
     const ib = c.independence_badge ? `<span class="hbadge ${c.independence_badge.cls}">${c.independence_badge.text}</span>` : '';
+    const cat = (c.catalysts||[]).join(' · ');
     const div = document.createElement('div');
     div.className = 'ccard';
     div.dataset.tags = JSON.stringify(c.tags||[]);
@@ -314,6 +316,7 @@ function renderCards() {
         <span class="score-num">${c.score}</span>
       </div>
       <div class="cc-spark"><canvas id="${id}"></canvas></div>
+      ${cat?`<div class="cc-catalyst">${cat}</div>`:''}
       <div class="cc-lenses">${ib}${lh}</div>`;
     div.addEventListener('click',()=>openDetail(c));
     grid.appendChild(div);
@@ -362,6 +365,7 @@ function openDetail(c) {
   const bH=(c.bull||[]).map(b=>`<li>${b}</li>`).join('');
   const beH=(c.bear||[]).map(b=>`<li>${b}</li>`).join('');
   const gH=(c.gaps||[]).map(g=>`<li>${g}</li>`).join('');
+  const cH=(c.catalysts||[]).map(v=>`<li>${v}</li>`).join('');
   const lH=(c.lenses||[]).map(l=>`<span class="d-ltag">${l}</span>`).join('');
   ct.innerHTML=`
     <div class="dt">${c.display_name}</div>
@@ -372,6 +376,7 @@ function openDetail(c) {
     ${c.thesis?`<div class="dl">핵심 판단</div><div class="d-thesis">${c.thesis}</div>`:''}
     ${bH?`<div class="dl">상승 근거</div><ul class="d-list bull">${bH}</ul>`:''}
     ${beH?`<div class="dl">주의 신호</div><ul class="d-list bear">${beH}</ul>`:''}
+    ${cH?`<div class="dl">Catalyst</div><ul class="d-list">${cH}</ul>`:''}
     ${gH?`<div class="dl">보강할 근거</div><ul class="d-list gap">${gH}</ul>`:''}
     <div class="dl">연결 관점</div><div class="d-lenses">${lH}</div>
     ${c.next?`<div class="dl">다음 확인</div><div class="d-action">${c.next}</div>`:''}`;
@@ -461,6 +466,9 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         )
         if candidate.thesis:
             lines.append(f"  - 핵심 판단: {candidate.thesis}")
+        catalyst_line = " · ".join(_catalyst_labels(candidate))
+        if catalyst_line:
+            lines.append(f"  - catalyst: {catalyst_line}")
         if candidate.next_action:
             lines.append(f"  - 다음 확인: {candidate.next_action}")
     return "\n".join(lines) + "\n"
@@ -526,6 +534,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
             "status_label": STATUS_LABELS.get(c.status.value, c.status.value),
             "lenses": [lns.name for lns in c.linked_lenses],
             "independence_badge": _independence_badge_payload(c),
+            "catalysts": _catalyst_labels(c),
             # Lazy Alpha: DB에서 자동 주입. DB 없거나 종목 없으면 null.
             "lazy": lazy_map.get(c.ticker),
         }
@@ -758,6 +767,24 @@ def _independence_badge_payload(candidate: Candidate) -> dict[str, str] | None:
         return None
     css_class = "bbad" if text.startswith("🚫") else "bneu"
     return {"text": text, "cls": css_class}
+
+
+def _catalyst_labels(candidate: Candidate) -> list[str]:
+    upcoming = _first_catalyst_label(candidate, "upcoming")
+    recent = _first_catalyst_label(candidate, "recent")
+    labels: list[str] = []
+    if upcoming:
+        labels.append(f"다가오는: {upcoming}")
+    if recent:
+        labels.append(f"최근: {recent}")
+    return labels
+
+
+def _first_catalyst_label(candidate: Candidate, direction: str) -> str:
+    for item in candidate.catalysts or []:
+        if item.get("direction") == direction and item.get("label"):
+            return str(item["label"])
+    return ""
 
 
 def _is_kr_stock(candidate: Candidate) -> bool:
