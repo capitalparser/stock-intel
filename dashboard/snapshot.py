@@ -21,6 +21,7 @@ from typing import Callable, Iterable
 from dashboard.macro_state import build_dual_regime as _build_dual_regime
 from dashboard.metrics import METRIC_FIELDS, build_metrics
 from dashboard.providers import RawStock, fetch_macro, fetch_raw_stock
+from dashboard.providers.catalyst import fetch_catalysts
 from dashboard.providers.independence_overlay import fetch_independence
 from dashboard.regime_history import DEFAULT_HISTORY_PATH, append_today, load_history
 
@@ -40,6 +41,7 @@ def build_snapshot(
     fetch: Callable[[str], RawStock] = fetch_raw_stock,
     macro: Callable[[], dict] = fetch_macro,
     independence: Callable[[str], dict] = fetch_independence,
+    catalysts: Callable[[str], list[dict]] = fetch_catalysts,
     as_of: str | None = None,
     persist_regime_history: bool = False,
 ) -> dict:
@@ -88,6 +90,7 @@ def build_snapshot(
             "independence_status": str(independence_read.get("status") or ""),
             "auditor": independence_read.get("auditor") or "",
             "independence_reason": str(independence_read.get("reason") or ""),
+            "catalysts": _safe_catalysts(catalysts, ticker),
             "metrics": result.scores,
             "data_quality": {
                 "missing": missing_fields,
@@ -122,6 +125,13 @@ def _independence_read(ticker: str, independence: Callable[[str], dict]) -> dict
             "auditor": "",
             "reason": f"독립성 overlay 실패: {type(exc).__name__}",
         }
+
+
+def _safe_catalysts(ticker_catalysts: Callable[[str], list[dict]], ticker: str) -> list[dict]:
+    try:
+        return [dict(item) for item in (ticker_catalysts(ticker) or [])]
+    except Exception:
+        return []
 
 
 def _peer_pe_by_group(

@@ -99,6 +99,28 @@ def test_snapshot_carries_independence_and_flow():
     assert stock["short_ratio"] == 6.2
 
 
+def test_snapshot_carries_catalysts():
+    raw = RawStock("000660", "KR", price=210000)
+
+    snapshot = build_snapshot(
+        [UniverseEntry("000660", "반도체")],
+        fetch=lambda ticker: raw,
+        macro=_empty_macro,
+        catalysts=lambda ticker: [
+            {
+                "type": "supply_contract",
+                "direction": "recent",
+                "date": "2026-06-01",
+                "days": 4,
+                "label": "공급계약 (6/1)",
+            }
+        ],
+        as_of="2026-06-05",
+    )
+
+    assert snapshot["stocks"]["000660"]["catalysts"][0]["label"] == "공급계약 (6/1)"
+
+
 def test_save_and_load_roundtrip(tmp_path):
     table = {"A": RawStock("A", "US", price=1.0, pe=10, as_of="2026-05-30")}
     snap = build_snapshot(
