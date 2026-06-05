@@ -11,7 +11,7 @@ from pathlib import Path
 
 from dashboard.kr_universe import kr_screen_stocks
 from dashboard.models import DashboardInput, parse_dashboard_input
-from dashboard.policy_lens import policy_lenses, seed_to_stock_low_pbr_seed_stocks
+from dashboard.policy_lens import policy_lenses, low_pbr_seed_stocks
 from dashboard.sample_data import SAMPLE_DASHBOARD
 
 
@@ -64,7 +64,7 @@ def build_market_insights_payload(
         payload["lenses"] = _merge_lenses(payload["lenses"], _policy_lens_payloads())
         payload["stocks"] = _merge_kr_screen(
             payload["stocks"],
-            seed_to_stock_low_pbr_seed_stocks(),
+            low_pbr_seed_stocks(),
         )
     return payload
 

@@ -81,12 +81,8 @@ def policy_lenses() -> list[PolicyLens]:
     return [VALUE_UP_LENS]
 
 
-def seed_to_stock_low_pbr_seed_stocks() -> list[dict]:
-    return [_seed_to_stock(code) for code in LOW_PBR_SEEDS]
-
-
 def low_pbr_seed_stocks() -> list[dict]:
-    return seed_to_stock_low_pbr_seed_stocks()
+    return [_seed_to_stock(code) for code in LOW_PBR_SEEDS]
 
 
 def _seed_to_stock(code: str) -> dict:
@@ -120,7 +116,7 @@ def _seed_to_stock(code: str) -> dict:
 
 def main() -> None:
     pprint(policy_lenses())
-    pprint(seed_to_stock_low_pbr_seed_stocks()[:3])
+    pprint(low_pbr_seed_stocks()[:3])
 
 
 if __name__ == "__main__":

@@ -164,3 +164,25 @@ def test_kr_snapshot_gracefully_degrades_when_provider_returns_errors():
     overlay_snapshot(payload, snapshot)
     overlaid = next(s for s in payload["stocks"] if str(s["ticker"]) == "000660")
     assert any("실데이터 미연결" in g for g in overlaid["gaps"])
+
+
+def test_all_low_pbr_seeds_keep_policy_lens_after_merge(tmp_path):
+    # 충돌(예: KR 스크린/큐레이션과 겹치는 시드)해도 value_up_low_pbr lens는 보존돼야 함 (Opus review #2).
+    from dashboard.policy_lens import LOW_PBR_SEEDS
+
+    payload = build_market_insights_payload(insights_dir=tmp_path)
+    by_ticker = {str(s["ticker"]): s for s in payload["stocks"]}
+    for code in LOW_PBR_SEEDS:
+        assert code in by_ticker, f"{code} 누락"
+        assert "value_up_low_pbr" in by_ticker[code]["lens_ids"], f"{code} 정책 렌즈 소실"
+
+
+def test_low_pbr_seed_materializes_as_candidate_with_policy_lens(tmp_path):
+    # 시드 경로가 파이프라인 끝(candidate.linked_lenses)까지 도달하는지 — G-01 보강 (Opus review #3).
+    from dashboard.models import parse_dashboard_input
+    from dashboard.screeners import build_dashboard
+
+    payload = build_market_insights_payload(insights_dir=tmp_path)
+    dash = build_dashboard(parse_dashboard_input(payload))
+    sk = next(c for c in dash.candidates if c.ticker == "034730")  # SK (비충돌 시드)
+    assert any(lens.name == "저PBR 밸류업" for lens in sk.linked_lenses)

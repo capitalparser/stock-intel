@@ -2,7 +2,7 @@ from dashboard.policy_lens import (
     LOW_PBR_SEEDS,
     VALUE_UP_LENS,
     policy_lenses,
-    seed_to_stock_low_pbr_seed_stocks,
+    low_pbr_seed_stocks,
 )
 
 
@@ -15,7 +15,7 @@ def test_policy_lenses_returns_value_up_lens():
 
 
 def test_low_pbr_seed_stocks_are_non_empty_and_cover_all_seed_codes():
-    stocks = seed_to_stock_low_pbr_seed_stocks()
+    stocks = low_pbr_seed_stocks()
     seed_codes = set(LOW_PBR_SEEDS)
     result_codes = {str(stock["ticker"]) for stock in stocks}
 
@@ -28,7 +28,7 @@ def test_low_pbr_seed_stocks_are_non_empty_and_cover_all_seed_codes():
 def test_low_pbr_seed_stock_shape_links_policy_lens():
     stock = next(
         stock
-        for stock in seed_to_stock_low_pbr_seed_stocks()
+        for stock in low_pbr_seed_stocks()
         if stock["ticker"] == "004020"
     )
 
