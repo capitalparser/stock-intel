@@ -18,10 +18,11 @@ def test_merge_kr_screen_dedups_existing_ticker():
             "ticker": "000660",
             "company": "SK하이닉스",
             "sector": "기존",
-            "lens_ids": ["semiconductors"],
+            "lens_ids": ["low_per_revision"],
             "source_refs": ["큐레이션"],
+            "thesis": "CURATED THESIS 보존 확인",
             "metrics": {
-                "valuation": 50,
+                "valuation": 73,
                 "quality": 50,
                 "growth": 50,
                 "revision": 50,
@@ -37,6 +38,11 @@ def test_merge_kr_screen_dedups_existing_ticker():
     assert len(rows) == 1
     assert "국장 스크린 (kr_watch_candidates)" in rows[0]["source_refs"]
     assert rows[0]["company"] == "SK하이닉스"
+    # 큐레이션 thesis/metrics 보존 (dedup은 source_refs/lens만 보강) — Opus review should-fix
+    assert rows[0]["thesis"] == "CURATED THESIS 보존 확인"
+    assert rows[0]["metrics"]["valuation"] == 73
+    # lens_ids 합집합 (큐레이션 + 스크린)
+    assert set(rows[0]["lens_ids"]) == {"low_per_revision", "semiconductors"}
 
 
 def test_existing_curated_payload_still_parses(tmp_path):
@@ -125,3 +131,10 @@ def test_kr_snapshot_gracefully_degrades_when_provider_returns_errors():
         "momentum": 50.0,
     }
     assert stock["data_quality"]["errors"] == ["yfinance: Timeout"]
+
+    # C-05: all-missing이 카드 gaps로 표면화돼 중립50이 ranking을 조용히 왜곡하지 않게 (Opus review should-fix)
+    from dashboard.live import overlay_snapshot
+
+    overlay_snapshot(payload, snapshot)
+    overlaid = next(s for s in payload["stocks"] if str(s["ticker"]) == "000660")
+    assert any("실데이터 미연결" in g for g in overlaid["gaps"])
