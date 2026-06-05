@@ -75,6 +75,7 @@ class StockInput:
     blocked: bool = False
     independence_status: str = ""
     auditor: str = ""
+    catalysts: list[dict] | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,7 @@ class Candidate:
     source_refs: list[str]
     independence_status: str = ""
     auditor: str = ""
+    catalysts: list[dict] | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +173,7 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             blocked=bool(item.get("blocked", False)),
             independence_status=str(item.get("independence_status", "")),
             auditor=str(item.get("auditor", "")),
+            catalysts=[dict(value) for value in item.get("catalysts", [])],
         )
         for item in payload.get("stocks", [])
     ]

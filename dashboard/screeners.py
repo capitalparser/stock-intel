@@ -71,6 +71,7 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         source_refs=stock.source_refs or [],
         independence_status=stock.independence_status,
         auditor=stock.auditor,
+        catalysts=stock.catalysts or [],
     )
 
 

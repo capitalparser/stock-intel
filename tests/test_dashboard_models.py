@@ -6,6 +6,7 @@ from dashboard.models import (
     parse_dashboard_input,
     parse_dual_regime,
 )
+from dashboard.screeners import build_dashboard
 from dashboard.sample_data import load_sample_dashboard_input
 from dashboard.market_insights import load_market_insights_dashboard_input
 
@@ -142,6 +143,84 @@ def test_parse_stock_carries_independence():
     stock = parsed.stocks[0]
     assert stock.independence_status == "BLOCKED_CONFIRMED"
     assert stock.auditor == "삼정회계법인"
+
+
+def test_parse_stock_carries_catalysts():
+    payload = {
+        "as_of": "2026-06-05",
+        "price_time": "2026-06-05T00:00:00+09:00",
+        "market_indicators": [],
+        "lenses": [],
+        "stocks": [
+            {
+                "ticker": "NVDA",
+                "company": "NVIDIA",
+                "sector": "Semis",
+                "lens_ids": [],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": [],
+                "gaps": [],
+                "catalysts": [
+                    {
+                        "type": "earnings",
+                        "direction": "upcoming",
+                        "date": "2026-06-17",
+                        "days": 12,
+                        "label": "실적 D-12",
+                    }
+                ],
+            }
+        ],
+    }
+
+    parsed = parse_dashboard_input(payload)
+
+    assert parsed.stocks[0].catalysts[0]["label"] == "실적 D-12"
+
+
+def test_build_dashboard_candidate_carries_catalysts():
+    payload = {
+        "as_of": "2026-06-05",
+        "price_time": "2026-06-05T00:00:00+09:00",
+        "market_indicators": [],
+        "lenses": [],
+        "stocks": [
+            {
+                "ticker": "000660",
+                "company": "SK하이닉스",
+                "sector": "반도체",
+                "lens_ids": [],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": ["seed"],
+                "gaps": [],
+                "catalysts": [
+                    {
+                        "type": "supply_contract",
+                        "direction": "recent",
+                        "date": "2026-06-01",
+                        "days": 4,
+                        "label": "공급계약 (6/1)",
+                    }
+                ],
+            }
+        ],
+    }
+
+    dashboard = build_dashboard(parse_dashboard_input(payload))
+
+    assert dashboard.candidates[0].catalysts[0]["label"] == "공급계약 (6/1)"
 
 
 def test_sample_dashboard_input_contains_initial_lens_set():
