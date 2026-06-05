@@ -6,6 +6,8 @@ from dashboard.live import (
     universe_from_payload,
 )
 from dashboard.market_insights import build_market_insights_payload
+from dashboard.models import parse_dashboard_input
+from dashboard.screeners import build_dashboard
 
 
 def _minimal_payload():
@@ -241,6 +243,65 @@ def test_overlay_carries_catalysts_and_evidence():
     stock = payload["stocks"][0]
     assert stock["catalysts"][0]["label"] == "공급계약 (6/1)"
     assert any("공급계약" in evidence for evidence in stock["evidence"])
+
+
+def test_low_pbr_stock_resolves_policy_lens_through_dashboard_pipeline(tmp_path):
+    payload = build_market_insights_payload(
+        insights_dir=tmp_path,
+        include_policy_lens=True,
+    )
+    payload["stocks"].append(
+        {
+            "ticker": "005490",
+            "company": "POSCO홀딩스",
+            "sector": "철강",
+            "lens_ids": [],
+            "metrics": {
+                "valuation": 50,
+                "quality": 50,
+                "growth": 50,
+                "revision": 50,
+                "momentum": 50,
+            },
+            "evidence": [],
+            "gaps": [],
+            "peer_group": "철강",
+        }
+    )
+    snapshot = {
+        "as_of": "2026-06-06",
+        "generated_at": "2026-06-06T09:00:00+09:00",
+        "macro": {},
+        "stocks": {
+            "005490": {
+                "source": "test",
+                "price": 300000,
+                "pbr": 0.42,
+                "metrics": {
+                    "valuation": 70,
+                    "quality": 55,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "data_quality": {
+                    "missing": [],
+                    "proxy": [],
+                    "errors": [],
+                    "as_of": "2026-06-06",
+                },
+            }
+        },
+    }
+
+    overlay_snapshot(payload, snapshot)
+    dashboard = build_dashboard(parse_dashboard_input(payload))
+    candidate = next(item for item in dashboard.candidates if item.ticker == "005490")
+
+    assert "value_up_low_pbr" in next(
+        stock for stock in payload["stocks"] if stock["ticker"] == "005490"
+    )["lens_ids"]
+    assert "저PBR 밸류업" in {lens.name for lens in candidate.linked_lenses}
 
 
 def test_load_live_falls_back_to_sample_when_no_snapshot(tmp_path):

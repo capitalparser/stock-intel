@@ -18,6 +18,7 @@ from dashboard.market_insights import (
     build_market_insights_payload,
 )
 from dashboard.models import DashboardInput, parse_dashboard_input
+from dashboard.policy_lens import LOW_PBR_THRESHOLD, VALUE_UP_LENS
 from dashboard.providers.independence_overlay import independence_flag
 from dashboard.snapshot import (
     DEFAULT_CACHE_DIR,
@@ -104,6 +105,7 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
     if snap.get("metrics"):
         stock["metrics"] = dict(snap["metrics"])
     _overlay_expectation_verdict(stock, snap)
+    _overlay_policy_lenses(stock, snap)
     _overlay_signature_fields(stock, snap)
     _overlay_catalysts(stock, snap)
 
@@ -119,6 +121,21 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
     proxy = dq.get("proxy") or []
     if "revision" in proxy:
         _append_evidence(stock, "이익상향(revision)은 수급·추세 기반 프록시 — 컨센서스 실데이터 아님")
+
+
+def _overlay_policy_lenses(stock: dict, snap: dict) -> None:
+    pbr = _optional_number(snap.get("pbr"))
+    if pbr is None or pbr >= LOW_PBR_THRESHOLD:
+        return
+
+    lens_ids = list(stock.get("lens_ids") or [])
+    if VALUE_UP_LENS.id not in lens_ids:
+        lens_ids.append(VALUE_UP_LENS.id)
+        stock["lens_ids"] = lens_ids
+    _append_evidence(
+        stock,
+        f"저PBR 밸류업 자동 편입 (PBR {pbr:.2f} < {LOW_PBR_THRESHOLD:.2f})",
+    )
 
 
 def _overlay_expectation_verdict(stock: dict, snap: dict) -> None:
