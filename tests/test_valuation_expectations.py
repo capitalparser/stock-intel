@@ -39,7 +39,15 @@ def test_verdict_data_missing_when_gam_is_none_after_computation():
         fcf_margin_pct=20.0,
     )
     assert out["verdict"] == "데이터 부족"
-    assert out["reason"] == "성장률 또는 PE 없음"
+    # 조기 반환(PE/성장 부재)과 변별되는 고유 reason — F-01 회귀 가드 (Opus review)
+    assert "배수-성장 평가 불가" in out["reason"]
+
+
+def test_verdict_mixed_growth_eps_negative_rev_positive():
+    # eps<0 & rev>0: max(-10, 80*0.5=40)=40 → gam=36/40=0.9(balanced), 성장 음수라 저평가 아님.
+    out = expectation_verdict(forward_pe=36.0, rev_growth_pct=80.0, eps_growth_pct=-10.0, fcf_margin_pct=46.0)
+    assert out["verdict"] in {"정당화 가능", "기대치 부담"}
+    assert out["growth_adjusted_multiple"] == 0.9
 
 
 def test_verdict_overheated_when_multiple_far_exceeds_growth():

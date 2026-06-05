@@ -77,7 +77,8 @@ def expectation_verdict(
         return _result("위험", "이익 추정 하향/역성장 중 고배수", gam, fcf, data_gaps)
 
     if gam is None:
-        return _result("데이터 부족", "성장률 또는 PE 없음", gam, fcf, data_gaps)
+        # 조기 반환(line 73)과 구분되는 고유 reason — F-01 회귀를 테스트가 잡게 (Opus review).
+        return _result("데이터 부족", "성장 데이터 부족으로 배수-성장 평가 불가", gam, fcf, data_gaps)
 
     if gam > 2.2:
         return _result("과열", "성장 대비 배수가 과도", gam, fcf, data_gaps)

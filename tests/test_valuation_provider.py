@@ -136,3 +136,15 @@ def test_fetch_valuation_degrades_to_data_missing(monkeypatch):
     out = fetch_valuation("NVDA")
 
     assert out["verdict"] == "데이터 부족"
+
+
+def test_fetch_valuation_fcf_margin_independent_of_negative_pe(monkeypatch):
+    # 음수 forwardPE여도 FCF 마진은 forward_pe와 무관하게 계산된다 (Opus review should-fix: 결합 분리).
+    import sys
+    info = {"forwardPE": -3.0, "revenueGrowth": 0.2, "earningsGrowth": -0.1,
+            "freeCashflow": 30e9, "totalRevenue": 100e9}
+    monkeypatch.setitem(sys.modules, "yfinance",
+                        SimpleNamespace(Ticker=lambda t: SimpleNamespace(info=info)))
+    out = fetch_valuation("NVDA")
+    assert out["forward_pe"] is None              # 음수 PE 차단
+    assert out["fcf_margin_pct"] == 30.0          # 그래도 FCF 마진은 산출(결합 분리)

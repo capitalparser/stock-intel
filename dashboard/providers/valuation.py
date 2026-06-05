@@ -17,7 +17,7 @@ def fetch_valuation(ticker: str) -> dict:
     forward_pe = _positive_float(info.get("forwardPE"))
     rev_growth_pct = _pct(info.get("revenueGrowth"))
     eps_growth_pct = _pct(info.get("earningsGrowth"))
-    fcf_margin_pct = _fcf_margin(info, forward_pe)
+    fcf_margin_pct = _fcf_margin(info)
     verdict = expectation_verdict(
         forward_pe=forward_pe,
         rev_growth_pct=rev_growth_pct,
@@ -66,10 +66,11 @@ def _has_core_fields(info: dict[str, Any]) -> bool:
     return any(info.get(field) is not None for field in _CORE_FIELDS)
 
 
-def _fcf_margin(info: dict[str, Any], forward_pe: float | None) -> float | None:
+def _fcf_margin(info: dict[str, Any]) -> float | None:
+    # FCF 마진은 forward_pe와 무관한 지표 — 결합하지 않는다 (Opus review should-fix).
     fcf = info.get("freeCashflow")
     total_revenue = info.get("totalRevenue")
-    if fcf is not None and total_revenue not in (None, 0) and forward_pe is not None and forward_pe > 0:
+    if fcf is not None and total_revenue not in (None, 0):
         return float(fcf) / float(total_revenue) * 100
     return None
 
