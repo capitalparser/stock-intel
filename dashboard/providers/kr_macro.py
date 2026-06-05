@@ -21,8 +21,8 @@ def realized_vol(closes: list[float], window: int = 20) -> float:
     return math.sqrt(var) * math.sqrt(252) * 100
 
 
-def relative_strength(kospi: list[float], kospi200: list[float], window: int = 20) -> float:
-    """KOSPI vs KOSPI200 relative strength, scaled 0..100."""
+def relative_strength(numerator: list[float], denominator: list[float], window: int = 20) -> float:
+    """Relative strength of numerator vs denominator, scaled 0..100."""
 
     def ret(series: list[float]) -> float:
         use = [float(c) for c in series if c is not None]
@@ -30,7 +30,7 @@ def relative_strength(kospi: list[float], kospi200: list[float], window: int = 2
             return 0.0
         return use[-1] / use[-window - 1] - 1
 
-    spread = ret(kospi) - ret(kospi200)
+    spread = ret(numerator) - ret(denominator)
     return max(0.0, min(100.0, 50.0 + spread * 1000))
 
 
@@ -41,18 +41,18 @@ def _rv_series(closes: list[float], window: int = 20) -> list[float]:
     return out
 
 
-def _rs_series(kospi: list[float], kospi200: list[float], window: int = 20) -> list[float]:
-    n = min(len(kospi), len(kospi200))
+def _rs_series(numerator: list[float], denominator: list[float], window: int = 20) -> list[float]:
+    n = min(len(numerator), len(denominator))
     out = []
     for end in range(window + 1, n + 1):
-        out.append(relative_strength(kospi[:end], kospi200[:end], window))
+        out.append(relative_strength(numerator[:end], denominator[:end], window))
     return out
 
 
 def build_kr_indicators(*, quotes: dict[str, Any]) -> list[dict]:
     inds: list[dict] = []
     kospi = quotes.get("KOSPI") or {}
-    kospi200 = quotes.get("KOSPI200") or {}
+    kosdaq = quotes.get("KOSDAQ") or {}
     usdkrw = quotes.get("USDKRW=X") or {}
     ewy = quotes.get("EWY") or {}
 
@@ -72,9 +72,9 @@ def build_kr_indicators(*, quotes: dict[str, Any]) -> list[dict]:
                 {"symbol": "KOSPI_RV", "value": rv[-1], "series": rv, "day_change_pct": 0.0}
             )
 
-    kospi200_closes = kospi200.get("closes") or []
-    if kospi_closes and kospi200_closes:
-        rs = _rs_series(kospi_closes, kospi200_closes)
+    kosdaq_closes = kosdaq.get("closes") or []
+    if kosdaq_closes and kospi_closes:
+        rs = _rs_series(kosdaq_closes, kospi_closes)
         if rs:
             inds.append(
                 {
