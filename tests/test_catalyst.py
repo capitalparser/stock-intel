@@ -103,3 +103,41 @@ def test_us_fetch_reads_yfinance_dict_calendar(monkeypatch):
             "detail": "",
         }
     ]
+
+
+def test_kr_fetch_no_gap_annotation_when_under_cap(monkeypatch):
+    # total_count <= 100이면 data_gap을 달지 않는다 (cap 네거티브 — Opus review should-fix).
+    import dashboard.providers.catalyst as catalyst
+
+    def fake_get(url, *, params, timeout):
+        return SimpleNamespace(json=lambda: {
+            "status": "000", "total_count": "3",
+            "list": [{"report_nm": "단일판매ㆍ공급계약체결", "rcept_dt": "20260601", "flr_nm": "SK하이닉스"}],
+        })
+
+    monkeypatch.setenv("DART_API_KEY", "key")
+    monkeypatch.setattr(catalyst, "find_corp_code", lambda api_key, ticker: "00126380")
+    monkeypatch.setattr(catalyst.requests, "get", fake_get)
+
+    out = fetch_catalysts("000660", market="KR", today="2026-06-05")
+
+    assert out and "data_gap" not in out[0]
+
+
+def test_us_fetch_drops_past_earnings(monkeypatch):
+    # 실적일이 과거(days<0)면 stale catalyst를 보이지 않는다 (Opus review should-fix).
+    import sys
+
+    class FakeTicker:
+        def __init__(self, ticker):
+            self.ticker = ticker
+
+        @property
+        def calendar(self):
+            return {"Earnings Date": [date(2026, 6, 1)]}
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(Ticker=FakeTicker))
+
+    out = fetch_catalysts("NVDA", market="US", today="2026-06-05")
+
+    assert out == []
