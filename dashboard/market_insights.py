@@ -8,6 +8,7 @@ from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
+from dashboard.kr_universe import kr_screen_stocks
 from dashboard.models import DashboardInput, parse_dashboard_input
 from dashboard.sample_data import SAMPLE_DASHBOARD
 
@@ -44,6 +45,8 @@ _FALLBACK_COMPANY_NAMES = {
 
 def build_market_insights_payload(
     insights_dir: str | Path = DEFAULT_MARKET_INSIGHTS_DIR,
+    *,
+    include_kr_screen: bool = True,
 ) -> dict:
     """Curated SAMPLE payload merged with tickers discovered in the vault.
 
@@ -52,7 +55,8 @@ def build_market_insights_payload(
     """
     payload = deepcopy(SAMPLE_DASHBOARD)
     insights = _collect_related_tickers(Path(insights_dir))
-    payload["stocks"] = _merge_stocks(payload["stocks"], insights)
+    merged = _merge_stocks(payload["stocks"], insights)
+    payload["stocks"] = _merge_kr_screen(merged, kr_screen_stocks()) if include_kr_screen else merged
     return payload
 
 
@@ -89,6 +93,23 @@ def _merge_stocks(curated: list[dict], insights: dict[str, list[str]]) -> list[d
             existing["lens_ids"] = sorted(set(existing.get("lens_ids", []) + _lens_ids_for_sources(sources)))
             continue
         stocks_by_ticker[ticker] = _default_stock(ticker, sources)
+    return sorted(stocks_by_ticker.values(), key=lambda item: str(item["ticker"]))
+
+
+def _merge_kr_screen(existing: list[dict], kr_stocks: list[dict]) -> list[dict]:
+    stocks_by_ticker = {str(item["ticker"]): deepcopy(item) for item in existing}
+    for kr_stock in kr_stocks:
+        ticker = str(kr_stock["ticker"])
+        if ticker in stocks_by_ticker:
+            current = stocks_by_ticker[ticker]
+            current["source_refs"] = sorted(
+                set(current.get("source_refs", []) + kr_stock.get("source_refs", []))
+            )
+            current["lens_ids"] = sorted(
+                set(current.get("lens_ids", []) + kr_stock.get("lens_ids", []))
+            )
+            continue
+        stocks_by_ticker[ticker] = deepcopy(kr_stock)
     return sorted(stocks_by_ticker.values(), key=lambda item: str(item["ticker"]))
 
 
