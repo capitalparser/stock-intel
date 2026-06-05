@@ -22,7 +22,9 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
     candidates = [_build_candidate(stock, lens_by_id) for stock in source.stocks]
     candidates.sort(
         key=lambda item: (
-            item.status != CandidateStatus.BLOCKED,
+            # BLOCKED(독립성 차단)은 맨 뒤로 강등 — 제외 아님. True(차단)가 뒤로 정렬되게 ==.
+            # (code review 2026-06-05 blocker: 기존 != 는 차단 종목을 후보 1번으로 승격시켰음)
+            item.status == CandidateStatus.BLOCKED,
             item.status != CandidateStatus.SETUP,
             item.price is None,
             -len(item.linked_lenses),

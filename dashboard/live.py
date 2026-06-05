@@ -168,4 +168,7 @@ def _append_evidence(stock: dict, message: str) -> None:
 def _optional_number(value) -> float | None:
     if value is None:
         return None
-    return float(value)
+    try:  # 외부 snapshot dict의 비숫자(빈문자열/"N/A")에도 degrade — code review should-fix
+        return float(value)
+    except (TypeError, ValueError):
+        return None

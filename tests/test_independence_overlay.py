@@ -58,10 +58,11 @@ def test_fetch_independence_kr_clean_auditor(monkeypatch):
 
 
 def test_fetch_independence_non_kr_is_manual_verify():
-    out = fetch_independence([{"ticker": "NVDA", "market": "US"}])
+    # classify_market은 KR/US만 구분 → 비-KR(NVDA)은 US로 분류돼 MANUAL_VERIFY (D-01).
+    out = fetch_independence("NVDA")
 
-    assert out["NVDA"]["status"] == "MANUAL_VERIFY"
-    assert out["NVDA"]["reason"] == "Market(US,미국)→MANUAL_VERIFY"
+    assert out["status"] == "MANUAL_VERIFY"
+    assert out["auditor"] is None
 
 
 def test_fetch_independence_degrades_when_kreports_missing(monkeypatch):

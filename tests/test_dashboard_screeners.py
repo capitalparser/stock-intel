@@ -176,7 +176,7 @@ def test_blocked_and_missing_evidence_control_status():
     assert statuses["GAP"] == CandidateStatus.RESEARCH
 
 
-def test_blocked_candidate_sorted_first_not_excluded_and_flagged():
+def test_blocked_candidate_demoted_last_not_excluded_and_flagged():
     parsed = parse_dashboard_input(
         {
             "as_of": "2026-06-05",
@@ -225,8 +225,9 @@ def test_blocked_candidate_sorted_first_not_excluded_and_flagged():
     dashboard = build_dashboard(parsed)
 
     tickers = [candidate.ticker for candidate in dashboard.candidates]
-    assert "000660" in tickers
-    assert tickers[0] == "000660"
+    assert "000660" in tickers                # 제외 안 됨(보이게 유지)
+    assert tickers[-1] == "000660"            # 점수 80이어도 차단이라 맨 뒤 강등 (제외 아님)
+    assert tickers[0] == "035420"             # 비차단 클린이 위로
     blocked = next(candidate for candidate in dashboard.candidates if candidate.ticker == "000660")
     assert any("독립성 차단" in flag for flag in blocked.risk_flags)
     assert blocked.independence_status == "BLOCKED_CONFIRMED"
