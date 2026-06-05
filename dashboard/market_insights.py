@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
 from dashboard.kr_universe import kr_screen_stocks
 from dashboard.models import DashboardInput, parse_dashboard_input
+from dashboard.policy_lens import policy_lenses, seed_to_stock_low_pbr_seed_stocks
 from dashboard.sample_data import SAMPLE_DASHBOARD
 
 
@@ -47,6 +49,7 @@ def build_market_insights_payload(
     insights_dir: str | Path = DEFAULT_MARKET_INSIGHTS_DIR,
     *,
     include_kr_screen: bool = True,
+    include_policy_lens: bool = True,
 ) -> dict:
     """Curated SAMPLE payload merged with tickers discovered in the vault.
 
@@ -57,6 +60,12 @@ def build_market_insights_payload(
     insights = _collect_related_tickers(Path(insights_dir))
     merged = _merge_stocks(payload["stocks"], insights)
     payload["stocks"] = _merge_kr_screen(merged, kr_screen_stocks()) if include_kr_screen else merged
+    if include_policy_lens:
+        payload["lenses"] = _merge_lenses(payload["lenses"], _policy_lens_payloads())
+        payload["stocks"] = _merge_kr_screen(
+            payload["stocks"],
+            seed_to_stock_low_pbr_seed_stocks(),
+        )
     return payload
 
 
@@ -111,6 +120,25 @@ def _merge_kr_screen(existing: list[dict], kr_stocks: list[dict]) -> list[dict]:
             continue
         stocks_by_ticker[ticker] = deepcopy(kr_stock)
     return sorted(stocks_by_ticker.values(), key=lambda item: str(item["ticker"]))
+
+
+def _merge_lenses(existing: list[dict], additions: list[dict]) -> list[dict]:
+    by_id = {str(item["id"]): deepcopy(item) for item in existing}
+    for lens in additions:
+        lens_id = str(lens["id"])
+        if lens_id not in by_id:
+            by_id[lens_id] = deepcopy(lens)
+    return list(by_id.values())
+
+
+def _policy_lens_payloads() -> list[dict]:
+    payloads: list[dict] = []
+    for lens in policy_lenses():
+        item = asdict(lens)
+        item["kind"] = lens.kind.value
+        item.pop("description", None)
+        payloads.append(item)
+    return payloads
 
 
 def _default_stock(ticker: str, sources: list[str]) -> dict:

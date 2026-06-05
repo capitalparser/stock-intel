@@ -10,6 +10,32 @@ def test_payload_includes_kr_screen_candidates(tmp_path):
     assert "267260" in tickers
 
 
+def test_payload_includes_policy_lens_and_low_pbr_seeds(tmp_path):
+    payload = build_market_insights_payload(
+        insights_dir=tmp_path,
+        include_policy_lens=True,
+    )
+    lens_ids = {str(lens["id"]) for lens in payload["lenses"]}
+    tickers = {str(stock["ticker"]) for stock in payload["stocks"]}
+    sk = next(stock for stock in payload["stocks"] if str(stock["ticker"]) == "034730")
+
+    assert "value_up_low_pbr" in lens_ids
+    assert {"004020", "034730"} <= tickers
+    assert "value_up_low_pbr" in sk["lens_ids"]
+
+
+def test_payload_can_exclude_policy_lens(tmp_path):
+    payload = build_market_insights_payload(
+        insights_dir=tmp_path,
+        include_policy_lens=False,
+    )
+    lens_ids = {str(lens["id"]) for lens in payload["lenses"]}
+    tickers = {str(stock["ticker"]) for stock in payload["stocks"]}
+
+    assert "value_up_low_pbr" not in lens_ids
+    assert "004020" not in tickers
+
+
 def test_merge_kr_screen_dedups_existing_ticker():
     from dashboard.market_insights import _merge_kr_screen
 
