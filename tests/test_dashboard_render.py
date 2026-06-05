@@ -310,6 +310,72 @@ def test_render_shows_catalyst():
     assert "최근: 공급계약 (6/1)" in html
 
 
+def test_render_shows_valuation_expectations_after_dual_regime_and_candidate_badge():
+    dashboard_input = parse_dashboard_input(
+        {
+            "as_of": "2026-06-06",
+            "price_time": "2026-06-06T00:00:00+09:00",
+            "market_indicators": [],
+            "dual_regime": {
+                "as_of": "2026-06-06",
+                "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
+                       "next_action": "검토", "axis_reads": [], "data_gaps": []},
+                "kr": {"market": "KR", "regime": "conditional", "why_it_matters": "KR",
+                       "next_action": "압축", "axis_reads": [], "data_gaps": []},
+                "transitions": {
+                    "us": {"changed": False, "from": "risk-on", "to": "risk-on",
+                           "streak": 2, "whipsaw": False, "axis_changes": []},
+                    "kr": {"changed": False, "from": "conditional", "to": "conditional",
+                           "streak": 2, "whipsaw": False, "axis_changes": []},
+                },
+            },
+            "valuation_expectations": [
+                {
+                    "ticker": "NVDA",
+                    "forward_pe": 90.0,
+                    "rev_growth_pct": 20.0,
+                    "eps_growth_pct": 30.0,
+                    "fcf_margin_pct": 20.0,
+                    "verdict": "과열",
+                    "read": "v1: 성장·FCF only",
+                    "data_gaps": ["가이던스 데이터 부족"],
+                }
+            ],
+            "lenses": [],
+            "stocks": [
+                {
+                    "ticker": "NVDA",
+                    "company": "NVIDIA",
+                    "sector": "Semis",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 50,
+                        "quality": 50,
+                        "growth": 50,
+                        "revision": 50,
+                        "momentum": 50,
+                    },
+                    "evidence": ["seed"],
+                    "gaps": [],
+                    "expectation_verdict": "과열",
+                }
+            ],
+        }
+    )
+    dashboard = build_dashboard(dashboard_input)
+
+    markdown = render_dashboard_markdown(dashboard)
+    html = render_dashboard_html(dashboard, db_path="/tmp/missing-stock-intel-state.db")
+
+    assert "## 밸류에이션 기대치 점검" in markdown
+    assert "NVDA" in markdown and "과열" in markdown
+    assert markdown.index("## 밸류에이션 기대치 점검") < markdown.index("## 시장 온도판")
+    assert "밸류에이션 기대치 점검" in html
+    assert html.index("밸류에이션 기대치 점검") > html.index("한미 듀얼 국면")
+    assert html.index("밸류에이션 기대치 점검") < html.index('<div class="macro-strip">')
+    assert '"expectation_badge": {"text": "과열", "cls": "bbad"}' in html
+
+
 def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
     # Force curated sample for a deterministic as_of date (no snapshot dependency).
     html_path, md_path, used_snapshot = write_dashboard_reports(

@@ -296,6 +296,7 @@ function renderCards() {
     const id = 'sp-'+c.ticker;
     const lh = (c.lenses||[]).map(l=>`<span class="ltag">${l}</span>`).join('');
     const ib = c.independence_badge ? `<span class="hbadge ${c.independence_badge.cls}">${c.independence_badge.text}</span>` : '';
+    const eb = c.expectation_badge ? `<span class="hbadge ${c.expectation_badge.cls}">${c.expectation_badge.text}</span>` : '';
     const cat = (c.catalysts||[]).join(' · ');
     const div = document.createElement('div');
     div.className = 'ccard';
@@ -317,7 +318,7 @@ function renderCards() {
       </div>
       <div class="cc-spark"><canvas id="${id}"></canvas></div>
       ${cat?`<div class="cc-catalyst">${cat}</div>`:''}
-      <div class="cc-lenses">${ib}${lh}</div>`;
+      <div class="cc-lenses">${ib}${eb}${lh}</div>`;
     div.addEventListener('click',()=>openDetail(c));
     grid.appendChild(div);
     requestAnimationFrame(()=>drawSpark(id,c.spark));
@@ -366,7 +367,8 @@ function openDetail(c) {
   const beH=(c.bear||[]).map(b=>`<li>${b}</li>`).join('');
   const gH=(c.gaps||[]).map(g=>`<li>${g}</li>`).join('');
   const cH=(c.catalysts||[]).map(v=>`<li>${v}</li>`).join('');
-  const lH=(c.lenses||[]).map(l=>`<span class="d-ltag">${l}</span>`).join('');
+    const lH=(c.lenses||[]).map(l=>`<span class="d-ltag">${l}</span>`).join('');
+  const eb = c.expectation_badge ? `<span class="hbadge ${c.expectation_badge.cls}">${c.expectation_badge.text}</span>` : '';
   ct.innerHTML=`
     <div class="dt">${c.display_name}</div>
     <div class="dco">${c.display_meta}</div>
@@ -378,7 +380,7 @@ function openDetail(c) {
     ${beH?`<div class="dl">주의 신호</div><ul class="d-list bear">${beH}</ul>`:''}
     ${cH?`<div class="dl">Catalyst</div><ul class="d-list">${cH}</ul>`:''}
     ${gH?`<div class="dl">보강할 근거</div><ul class="d-list gap">${gH}</ul>`:''}
-    <div class="dl">연결 관점</div><div class="d-lenses">${lH}</div>
+    <div class="dl">연결 관점</div><div class="d-lenses">${eb}${lH}</div>
     ${c.next?`<div class="dl">다음 확인</div><div class="d-action">${c.next}</div>`:''}`;
   ov.classList.add('on'); pn.classList.add('on');
   if(dChart){dChart.destroy();dChart=null;}
@@ -442,6 +444,7 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
     if dashboard.dual_regime:
         lines.extend(_dual_regime_markdown_lines(dashboard))
         lines.append("")
+    lines.extend(_valuation_expectations_markdown_lines(dashboard))
     lines += [
         "",
         "## 시장 온도판",
@@ -534,6 +537,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
             "status_label": STATUS_LABELS.get(c.status.value, c.status.value),
             "lenses": [lns.name for lns in c.linked_lenses],
             "independence_badge": _independence_badge_payload(c),
+            "expectation_badge": _expectation_badge_payload(c),
             "catalysts": _catalyst_labels(c),
             # Lazy Alpha: DB에서 자동 주입. DB 없거나 종목 없으면 null.
             "lazy": lazy_map.get(c.ticker),
@@ -578,6 +582,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
 </header>
 <main>
 {_dual_regime_html(dashboard)}
+{_valuation_expectations_html(dashboard)}
   <div class="macro-strip">
 {macro_cards}
     <div class="mkpi">
@@ -730,6 +735,81 @@ def _pctile_read(value: float | None) -> str:
     return f"백분위 {value * 100:.0f}%"
 
 
+def _valuation_expectations_markdown_lines(dashboard: Dashboard) -> list[str]:
+    reads = _sorted_valuation_expectations(dashboard)
+    if not reads:
+        return []
+    lines = [
+        "## 밸류에이션 기대치 점검",
+        "| 종목 | Forward P/E | 성장 | FCF | 기대치 판정 |",
+        "|---|---:|---:|---:|---|",
+    ]
+    for item in reads:
+        growth = _growth_read(item.rev_growth_pct, item.eps_growth_pct)
+        lines.append(
+            f"| {item.ticker} | {_multiple(item.forward_pe)} | {growth} | "
+            f"{_pct(item.fcf_margin_pct)} | {item.verdict} |"
+        )
+    return lines
+
+
+def _valuation_expectations_html(dashboard: Dashboard) -> str:
+    reads = _sorted_valuation_expectations(dashboard)
+    if not reads:
+        return ""
+    rows = "\n".join(
+        "        <tr>"
+        f"<td><strong>{escape(item.ticker)}</strong></td>"
+        f"<td>{escape(_multiple(item.forward_pe))}</td>"
+        f"<td>{escape(_growth_read(item.rev_growth_pct, item.eps_growth_pct))}</td>"
+        f"<td>{escape(_pct(item.fcf_margin_pct))}</td>"
+        f"<td><span class=\"hbadge {escape(_expectation_class(item.verdict))}\">{escape(item.verdict)}</span>"
+        f"<br><span class=\"hcell-risk\">{escape(item.read or '-')}</span></td>"
+        "</tr>"
+        for item in reads
+    )
+    return f"""  <div class="sh"><h2>밸류에이션 기대치 점검</h2></div>
+  <div class="twrap">
+    <table>
+      <thead>
+        <tr>
+          <th>종목</th><th>Forward P/E</th><th>성장</th><th>FCF</th><th>기대치 판정</th>
+        </tr>
+      </thead>
+      <tbody>
+{rows}
+      </tbody>
+    </table>
+  </div>
+"""
+
+
+def _sorted_valuation_expectations(dashboard: Dashboard) -> list:
+    reads = list(dashboard.valuation_expectations or [])
+    return sorted(reads, key=lambda item: (_expectation_rank(item.verdict), item.ticker))
+
+
+def _expectation_rank(verdict: str) -> int:
+    return {
+        "위험": 0,
+        "과열": 1,
+        "기대치 부담": 2,
+        "기대치부담": 2,
+        "데이터 부족": 3,
+        "정당화 가능": 4,
+        "저평가 후보": 5,
+    }.get(verdict, 6)
+
+
+def _growth_read(rev_growth_pct: float | None, eps_growth_pct: float | None) -> str:
+    parts: list[str] = []
+    if eps_growth_pct is not None:
+        parts.append(f"EPS {_pct(eps_growth_pct)}")
+    if rev_growth_pct is not None:
+        parts.append(f"매출 {_pct(rev_growth_pct)}")
+    return " · ".join(parts) or "-"
+
+
 def _display_name(candidate: Candidate) -> str:
     return candidate.company if _is_kr_stock(candidate) else candidate.ticker
 
@@ -767,6 +847,21 @@ def _independence_badge_payload(candidate: Candidate) -> dict[str, str] | None:
         return None
     css_class = "bbad" if text.startswith("🚫") else "bneu"
     return {"text": text, "cls": css_class}
+
+
+def _expectation_badge_payload(candidate: Candidate) -> dict[str, str] | None:
+    verdict = candidate.expectation_verdict
+    if not verdict:
+        return None
+    return {"text": verdict, "cls": _expectation_class(verdict)}
+
+
+def _expectation_class(verdict: str) -> str:
+    if verdict in {"과열", "위험"}:
+        return "bbad"
+    if verdict in {"기대치 부담", "기대치부담", "데이터 부족"}:
+        return "bneu"
+    return "bhi"
 
 
 def _catalyst_labels(candidate: Candidate) -> list[str]:
