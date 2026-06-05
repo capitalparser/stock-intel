@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pprint import pprint
 
 from dashboard.models import LensKind
 
@@ -115,3 +116,12 @@ def _seed_to_stock(code: str) -> dict:
         "source_refs": ["저PBR 밸류업 정책 렌즈"],
         "peer_group": "저PBR 밸류업",
     }
+
+
+def main() -> None:
+    pprint(policy_lenses())
+    pprint(seed_to_stock_low_pbr_seed_stocks()[:3])
+
+
+if __name__ == "__main__":
+    main()

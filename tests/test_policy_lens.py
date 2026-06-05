@@ -46,3 +46,15 @@ def test_low_pbr_seed_stock_shape_links_policy_lens():
             "peer_group",
         )
     )
+
+
+def test_policy_lens_main_prints_lens_and_first_three_seed_stocks(capsys):
+    from dashboard.policy_lens import main
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "저PBR 밸류업" in out
+    assert "004020" in out
+    assert "011170" in out
+    assert "011780" in out
