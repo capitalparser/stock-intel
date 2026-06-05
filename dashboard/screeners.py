@@ -39,6 +39,7 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
         market_indicators=source.market_indicators,
         lenses=source.lenses,
         candidates=candidates,
+        valuation_expectations=source.valuation_expectations or [],
         dual_regime=source.dual_regime,
     )
 
@@ -72,6 +73,7 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         independence_status=stock.independence_status,
         auditor=stock.auditor,
         catalysts=stock.catalysts or [],
+        expectation_verdict=stock.expectation_verdict,
     )
 
 

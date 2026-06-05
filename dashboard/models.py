@@ -54,6 +54,23 @@ class StockMetrics:
 
 
 @dataclass(frozen=True)
+class ValuationExpectation:
+    ticker: str
+    forward_pe: float | None
+    rev_growth_pct: float | None
+    eps_growth_pct: float | None
+    fcf_margin_pct: float | None
+    verdict: str
+    read: str
+    data_gaps: list[str]
+    reason: str = ""
+    growth_adjusted_multiple: float | None = None
+    fcf_band: str = ""
+    analyst_n: int | None = None
+    recommendation: str = ""
+
+
+@dataclass(frozen=True)
 class StockInput:
     ticker: str
     company: str
@@ -76,6 +93,7 @@ class StockInput:
     independence_status: str = ""
     auditor: str = ""
     catalysts: list[dict] | None = None
+    expectation_verdict: str = ""
 
 
 @dataclass(frozen=True)
@@ -96,6 +114,7 @@ class DashboardInput:
     market_indicators: list[MarketIndicator]
     lenses: list[Lens]
     stocks: list[StockInput]
+    valuation_expectations: list[ValuationExpectation] | None = None
     dual_regime: DualRegime | None = None
 
 
@@ -124,6 +143,7 @@ class Candidate:
     independence_status: str = ""
     auditor: str = ""
     catalysts: list[dict] | None = None
+    expectation_verdict: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +154,7 @@ class Dashboard:
     market_indicators: list[MarketIndicator]
     lenses: list[Lens]
     candidates: list[Candidate]
+    valuation_expectations: list[ValuationExpectation] | None = None
     dual_regime: DualRegime | None = None
 
 
@@ -174,6 +195,7 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             independence_status=str(item.get("independence_status", "")),
             auditor=str(item.get("auditor", "")),
             catalysts=[dict(value) for value in item.get("catalysts", [])],
+            expectation_verdict=str(item.get("expectation_verdict", "")),
         )
         for item in payload.get("stocks", [])
     ]
@@ -194,6 +216,10 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
         ],
         lenses=lenses,
         stocks=stocks,
+        valuation_expectations=[
+            _parse_valuation_expectation(item)
+            for item in payload.get("valuation_expectations", [])
+        ],
         dual_regime=parse_dual_regime(payload.get("dual_regime")),
     )
 
@@ -218,6 +244,25 @@ def _parse_metrics(payload: dict[str, Any]) -> StockMetrics:
         growth=float(payload.get("growth", 0)),
         revision=float(payload.get("revision", 0)),
         momentum=float(payload.get("momentum", 0)),
+    )
+
+
+def _parse_valuation_expectation(payload: dict[str, Any]) -> ValuationExpectation:
+    analyst_n = payload.get("analyst_n")
+    return ValuationExpectation(
+        ticker=str(payload["ticker"]),
+        forward_pe=_optional_float(payload.get("forward_pe")),
+        rev_growth_pct=_optional_float(payload.get("rev_growth_pct")),
+        eps_growth_pct=_optional_float(payload.get("eps_growth_pct")),
+        fcf_margin_pct=_optional_float(payload.get("fcf_margin_pct")),
+        verdict=str(payload.get("verdict", "데이터 부족")),
+        read=str(payload.get("read", "")),
+        data_gaps=[str(value) for value in payload.get("data_gaps", [])],
+        reason=str(payload.get("reason", "")),
+        growth_adjusted_multiple=_optional_float(payload.get("growth_adjusted_multiple")),
+        fcf_band=str(payload.get("fcf_band", "")),
+        analyst_n=(None if analyst_n is None else int(analyst_n)),
+        recommendation=str(payload.get("recommendation", "")),
     )
 
 

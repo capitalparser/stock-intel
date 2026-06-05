@@ -223,6 +223,63 @@ def test_build_dashboard_candidate_carries_catalysts():
     assert dashboard.candidates[0].catalysts[0]["label"] == "공급계약 (6/1)"
 
 
+def test_parse_valuation_expectations_and_candidate_verdict():
+    payload = {
+        "as_of": "2026-06-06",
+        "price_time": "2026-06-06T00:00:00+09:00",
+        "market_indicators": [],
+        "lenses": [
+            {
+                "id": "ai",
+                "kind": "thesis",
+                "name": "AI",
+                "conviction": "high",
+                "direction": "improving",
+                "weights": {"valuation": 1.0},
+                "risks": [],
+            }
+        ],
+        "valuation_expectations": [
+            {
+                "ticker": "NVDA",
+                "forward_pe": 16.4,
+                "rev_growth_pct": 85.0,
+                "eps_growth_pct": 210.0,
+                "fcf_margin_pct": 46.0,
+                "verdict": "정당화 가능",
+                "read": "v1: 성장·FCF only",
+                "data_gaps": [],
+            }
+        ],
+        "stocks": [
+            {
+                "ticker": "NVDA",
+                "company": "NVIDIA",
+                "sector": "Semis",
+                "lens_ids": ["ai"],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": ["seed"],
+                "gaps": [],
+                "expectation_verdict": "정당화 가능",
+            }
+        ],
+    }
+
+    parsed = parse_dashboard_input(payload)
+    dashboard = build_dashboard(parsed)
+
+    assert parsed.valuation_expectations[0].verdict == "정당화 가능"
+    assert dashboard.valuation_expectations[0].ticker == "NVDA"
+    assert dashboard.candidates[0].expectation_verdict == "정당화 가능"
+    assert dashboard.candidates[0].score == 50.0
+
+
 def test_sample_dashboard_input_contains_initial_lens_set():
     parsed = load_sample_dashboard_input()
 
