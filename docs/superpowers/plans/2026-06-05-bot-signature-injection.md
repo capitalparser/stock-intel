@@ -433,5 +433,14 @@ Expected: 후보 카드에 🚫/🟡 배지, BLOCKED 종목이 상위 후보 하
 ## Cross-model review 예정
 (b) Codex plan 리뷰 → 차이 머지 → Codex 구현 → (a) Opus code 리뷰.
 
+## Cross-model review 반영 v2 (2026-06-05, Codex leg) — **본 섹션이 위 태스크 본문에 우선**
+
+Codex 리뷰: blocker 0, should-fix 2. Point 1·3·4·5·6 PASS(검증됨). 반영:
+
+- **D-01 (Point 2 — 비-KR market 분류):** `classify_market`는 **KR/US만** 반환(JP/UNKNOWN 분기 없음). 따라서 dashboard v1에서 **비-KR 티커는 전부 US로 분류 → `decide_independence`가 `MANUAL_VERIFY` → 🟡 독립성 확인 필요**로 degrade(기능상 정상: 미국·일본·기타 모두 자동 확인 미지원이라 🟡이 맞음). `fetch_independence`의 비-KR 분기는 `Market("US", "미국")`(생성자 `(code, label)`)로 호출하면 됨 — 별도 JP 분기 불필요. test_fetch_independence_us_is_manual_verify 그대로 유효. (JP 자동조회는 v1.1; classify_market 확장은 비범위.)
+- **D-02 (Point 7 — 테스트 픽스처·CSS):**
+  - `_minimal_payload_with_one_stock`/`_two_stock_payload`/`blocked_candidate_dashboard`는 **기존 파일에 없다**(plan 발명). 구현자는 **각 테스트 파일의 기존 인라인 페이로드/대시보드 생성 패턴을 그대로 따라 새로 작성**한다(이미 있는 헬퍼인 척 import 금지). 예: test_dashboard_screeners.py의 기존 stock dict 구성 방식을 복제해 2종목(blocked/clean) 페이로드를 인라인으로 만든다.
+  - render: `.hbadge.bneu`만 존재하고 **`.hbadge.bbad`는 없다**. Task 6에서 BLOCKED 배지용 `.hbadge.bbad`(경고/적색) CSS 클래스를 **추가**하고, MANUAL은 기존 `.bneu` 재사용. md는 🚫/🟡 텍스트.
+
 ## 다음 Plan
 Plan 3 catalyst / Plan 6 밸류에이션 기대치(forward-pe) / Plan 7 정책 렌즈(저PBR).
