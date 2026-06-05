@@ -132,7 +132,13 @@ def fetch_kr_quotes() -> dict[str, Any]:
     for key, yf_symbol in symbols.items():
         try:
             data = yf.download(yf_symbol, period="1y", interval="1d", progress=False)
-            closes = [float(v) for v in data["Close"].dropna().tolist()]
+            close_obj = data["Close"]
+            # yfinance 2.x returns a MultiIndex column even for single-symbol
+            # downloads, so ``data["Close"]`` is a single-column DataFrame
+            # rather than a Series. Collapse it back to 1D before tolist().
+            if hasattr(close_obj, "ndim") and close_obj.ndim > 1:
+                close_obj = close_obj.iloc[:, 0]
+            closes = [float(v) for v in close_obj.dropna().tolist()]
         except Exception:
             continue
         closes = [c for c in closes if math.isfinite(c)]

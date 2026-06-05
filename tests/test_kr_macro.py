@@ -95,6 +95,59 @@ def test_fetch_kr_quotes_uses_yfinance_etf_proxies_only(monkeypatch):
     assert out["KOSPI"]["day_change_pct"] > 0
 
 
+def test_fetch_kr_quotes_handles_multiindex_close(monkeypatch):
+    # yfinance 2.x returns single-symbol downloads with a MultiIndex column,
+    # so ``data["Close"]`` is a 1-column DataFrame rather than a Series.
+    # Regression: before this fix, .tolist() raised AttributeError and the
+    # except-Exception block silently swallowed every symbol, returning {}.
+    class FakeSeries:
+        def __init__(self, values):
+            self._values = values
+            self.ndim = 1
+
+        def dropna(self):
+            return self
+
+        def tolist(self):
+            return self._values
+
+    class FakeCloseFrame:
+        def __init__(self, values):
+            self._values = values
+            self.ndim = 2
+
+        class _ILoc:
+            def __init__(self, values):
+                self._values = values
+
+            def __getitem__(self, key):
+                assert key == (slice(None), 0)
+                return FakeSeries(self._values)
+
+        @property
+        def iloc(self):
+            return FakeCloseFrame._ILoc(self._values)
+
+    class FakeFrame:
+        def __init__(self, values):
+            self._values = values
+
+        def __getitem__(self, key):
+            assert key == "Close"
+            return FakeCloseFrame(self._values)
+
+    def fake_download(symbol, *, period, interval, progress):
+        return FakeFrame([100.0, 101.5, 103.0])
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=fake_download))
+
+    out = fetch_kr_quotes()
+
+    assert set(out) == {"KOSPI", "KOSDAQ", "USDKRW=X", "EWY"}
+    assert out["KOSPI"]["closes"] == [100.0, 101.5, 103.0]
+    assert out["KOSPI"]["value"] == 103.0
+
+
 def test_fetch_kr_quotes_skips_symbol_failures(monkeypatch):
     class FakeClose:
         def dropna(self):
