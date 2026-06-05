@@ -11,6 +11,7 @@ from dashboard.models import (
     StockInput,
     StockMetrics,
 )
+from dashboard.providers.independence_overlay import independence_flag
 
 
 METRIC_NAMES = ("valuation", "quality", "growth", "revision", "momentum")
@@ -21,6 +22,7 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
     candidates = [_build_candidate(stock, lens_by_id) for stock in source.stocks]
     candidates.sort(
         key=lambda item: (
+            item.status != CandidateStatus.BLOCKED,
             item.status != CandidateStatus.SETUP,
             item.price is None,
             -len(item.linked_lenses),
@@ -65,6 +67,8 @@ def _build_candidate(stock: StockInput, lens_by_id: dict[str, Lens]) -> Candidat
         peer_pe=stock.peer_pe,
         peer_group=stock.peer_group,
         source_refs=stock.source_refs or [],
+        independence_status=stock.independence_status,
+        auditor=stock.auditor,
     )
 
 
@@ -100,6 +104,9 @@ def _status_for(stock: StockInput, linked: list[Lens], score: float) -> Candidat
 
 def _risk_flags(stock: StockInput, score: float) -> list[str]:
     flags: list[str] = []
+    flag, _ = independence_flag(stock.independence_status)
+    if flag:
+        flags.append(flag)
     if stock.metrics.valuation < 35:
         flags.append("valuation stretch")
     if stock.metrics.revision < 40:

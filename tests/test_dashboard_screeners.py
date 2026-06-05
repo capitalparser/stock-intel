@@ -176,6 +176,63 @@ def test_blocked_and_missing_evidence_control_status():
     assert statuses["GAP"] == CandidateStatus.RESEARCH
 
 
+def test_blocked_candidate_sorted_first_not_excluded_and_flagged():
+    parsed = parse_dashboard_input(
+        {
+            "as_of": "2026-06-05",
+            "price_time": "2026-06-05T00:00:00+09:00",
+            "market_indicators": [],
+            "lenses": [],
+            "stocks": [
+                {
+                    "ticker": "035420",
+                    "company": "NAVER",
+                    "sector": "인터넷",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 55,
+                        "quality": 55,
+                        "growth": 55,
+                        "revision": 55,
+                        "momentum": 55,
+                    },
+                    "evidence": ["clean"],
+                    "gaps": [],
+                    "independence_status": "CLEAR_CONFIRMED",
+                },
+                {
+                    "ticker": "000660",
+                    "company": "SK하이닉스",
+                    "sector": "반도체",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 80,
+                        "quality": 80,
+                        "growth": 80,
+                        "revision": 80,
+                        "momentum": 80,
+                    },
+                    "evidence": ["blocked"],
+                    "gaps": [],
+                    "blocked": True,
+                    "independence_status": "BLOCKED_CONFIRMED",
+                    "auditor": "삼정회계법인",
+                },
+            ],
+        }
+    )
+
+    dashboard = build_dashboard(parsed)
+
+    tickers = [candidate.ticker for candidate in dashboard.candidates]
+    assert "000660" in tickers
+    assert tickers[0] == "000660"
+    blocked = next(candidate for candidate in dashboard.candidates if candidate.ticker == "000660")
+    assert any("독립성 차단" in flag for flag in blocked.risk_flags)
+    assert blocked.independence_status == "BLOCKED_CONFIRMED"
+    assert blocked.auditor == "삼정회계법인"
+
+
 def test_build_dashboard_passes_dual_regime():
     parsed = parse_dashboard_input(
         {
