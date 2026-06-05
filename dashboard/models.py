@@ -73,6 +73,8 @@ class StockInput:
     peer_group: str = ""
     source_refs: list[str] | None = None
     blocked: bool = False
+    independence_status: str = ""
+    auditor: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,8 @@ class Candidate:
     peer_pe: float | None
     peer_group: str
     source_refs: list[str]
+    independence_status: str = ""
+    auditor: str = ""
 
 
 @dataclass(frozen=True)
@@ -165,6 +169,8 @@ def parse_dashboard_input(payload: dict[str, Any]) -> DashboardInput:
             peer_group=str(item.get("peer_group", "")),
             source_refs=[str(value) for value in item.get("source_refs", [])],
             blocked=bool(item.get("blocked", False)),
+            independence_status=str(item.get("independence_status", "")),
+            auditor=str(item.get("auditor", "")),
         )
         for item in payload.get("stocks", [])
     ]

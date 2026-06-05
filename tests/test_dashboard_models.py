@@ -110,6 +110,40 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert CandidateStatus.WATCH.value == "Watch"
 
 
+def test_parse_stock_carries_independence():
+    payload = {
+        "as_of": "2026-06-05",
+        "price_time": "2026-06-05T00:00:00+09:00",
+        "market_indicators": [],
+        "lenses": [],
+        "stocks": [
+            {
+                "ticker": "000660",
+                "company": "SK하이닉스",
+                "sector": "반도체",
+                "lens_ids": [],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": [],
+                "gaps": [],
+                "independence_status": "BLOCKED_CONFIRMED",
+                "auditor": "삼정회계법인",
+            }
+        ],
+    }
+
+    parsed = parse_dashboard_input(payload)
+
+    stock = parsed.stocks[0]
+    assert stock.independence_status == "BLOCKED_CONFIRMED"
+    assert stock.auditor == "삼정회계법인"
+
+
 def test_sample_dashboard_input_contains_initial_lens_set():
     parsed = load_sample_dashboard_input()
 
