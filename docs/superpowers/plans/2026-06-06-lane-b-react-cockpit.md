@@ -108,5 +108,18 @@ web/
 ## Cross-model review 예정
 (b) Codex plan 리뷰(스택·데이터 계약·Task 0 필요성·export 재현성) → 머지 → Codex 구현(React, multi-file) → (a) Opus code 리뷰 + design-kit critique-checklist.
 
+## Cross-model review 반영 v2 (2026-06-06, Codex leg) — **본 섹션이 위 태스크 본문에 우선**
+
+Codex 리뷰: REJECT(blocker 2 + should-fix 8). React 착수 전 plan 보강. 반영:
+
+- **H-01 (B1, typo):** 데이터 계약 확정은 **Task 0**(위 "데이터 계약" 주석의 "Task 1"은 오기 → Task 0).
+- **H-02 (B2, sparkline series):** 스냅샷 stock에 가격 series가 없음(macro indicator에만 존재). **Task 0에 per-stock 가격 series export 추가**(KR/US provider가 metrics 계산 시 이미 closes를 받음 → 최근 ~60개 close를 stock에 carry). 불가/지연 시 **Task 5 sparkline은 series 있으면 그리고 없으면 생략(v1.1)** — degrade-friendly로 명시.
+- **H-03 (S1·S2, 데이터 계약 소스):** Task 0 직렬화 대상 = `market_insights.build_market_insights_payload()` + `live.overlay_snapshot()` 결과(candidate narrative/lens_ids/evidence/thesis/score/status/risk_flags + lenses) **+ valuation_expectations**. **build_dashboard_snapshot이 valuation을 실제 호출·carry하는지 점검**(현재 top-level에 0개 — 미배선 가능성). Task 0 acceptance: 재생성 후 JSON에 top-level `valuation_expectations` + stock별 narrative/lens + (가능 시)series 존재 assert.
+- **H-04 (S3, Radix):** Tech Stack·Task 3에 **Radix UI**(shadcn/ui 기반) 추가(web-app-kit Required).
+- **H-05 (S4·S5, cockpit profile):** `data-cockpit-profile="executive_cockpit"`(총괄현황 = 시장/포트폴리오 overview에 가장 근접한 기존 enum)으로 고정 + display label은 로컬 "개인 투자 상황판". 신규 enum 미추가, **로컬 라벨은 기존 CockpitProfile 값을 wrap**(TS union 충돌 회피).
+- **H-06 (S6·S7, export 엄밀성):** Task 9 footer에 `소스 대시보드명 · ISO8601 KST 타임스탬프 · userOrService · 데이터 윈도우 · data hash`. acceptance에 export-kit 체크: `node --check`(인라인 JS), `data-target↔data-panel` 일치, `file://` 오프라인 동작, HTTP/CDN asset 부재 grep, diff 재현성(타임스탬프 제외), 파일 크기, A4 print preview.
+- **H-07 (S8, 검증 분리):** 최종 검증 = `uv run pytest tests/test_snapshot.py`(Python 데이터계약) + `cd web && npm test && npm run build`(React). bot.py/insight_lookup 미접촉 acceptance에 명시.
+- **H-08 (nit):** "현재 뷰" = 현재 탭 + 현재 필터 상태.
+
 ## 다음
-v1.1: render.py(구 다크) 정리/삭제, investment_cockpit 프로필 정식화 검토, Telegram 전달, 실시간 backend.
+v1.1: render.py(구 다크) 정리/삭제, per-stock series 미구현 시 sparkline, investment_cockpit 프로필 정식화 검토, Telegram 전달, 실시간 backend.
