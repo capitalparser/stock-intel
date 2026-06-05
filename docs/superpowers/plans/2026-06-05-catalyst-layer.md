@@ -438,5 +438,16 @@ Expected: 에러 없이 빌드. 일부 KR 종목에 `공급계약`, 일부 US �
 ## Cross-model review 예정
 (b) Codex plan 리뷰 → 차이 머지 → Codex 구현 → (a) Opus code 리뷰.
 
+## Cross-model review 반영 v2 (2026-06-06, Codex leg) — **본 섹션이 위 태스크 본문에 우선**
+
+Codex 리뷰: CONDITIONAL, blocker 0, should-fix 3 + nit 3. 반영:
+
+- **E-01 (sf, DART pagination):** `page_count=100` 1페이지만 fetch. 단일 기업 90일 공급계약은 100건 초과가 드물어 루프 없이 **최신 100건으로 cap**하되, 응답 `total_count`/`total_page`가 1 초과면 `data_gap`/log로 "공급계약 100건 초과 — 최신만" 표기(no-silent-cap). 루프는 v1.1.
+- **E-02 (sf, rcept_dt 검증):** `_supply_contract_catalysts`에서 길이 체크만으로 부족 — 비정상 날짜(`20261340`)가 `date.fromisoformat` 예외 → **행 단위 try/except로 불량 행만 skip**(전체 KR fetch가 degrade되지 않게). `re.fullmatch(r"\d{8}", raw)` + per-row 예외 처리. 불량 날짜 행 skip 테스트 추가.
+- **E-03 (sf, corp_code 공개화):** `data/fundamental.py`의 `_find_corp_code` → **public `find_corp_code`로 승격**(또는 wrapper 추가)하고 catalyst.py·fundamental.py 양쪽이 공용 import. private cross-module import 제거. `_load_corp_code_xml` 캐시 쓰기는 의도된 동작이므로 유지.
+- **E-04 (nit, yfinance 버전):** lock은 yfinance **1.4.1**(2.x 아님). `_extract_earnings_date` 주석을 "yfinance 1.x: `.calendar`는 dict, 'Earnings Date'는 date/Timestamp 리스트"로 교정. dict 형태 unit test 추가(monkeypatch로 fake `yf.Ticker.calendar`).
+- **E-05 (nit, bgn 오타):** 구현 시 `bgn = replace(day=1)` 잔재 줄 삭제, `bgn = _minus_days(today, 90)`만.
+- **E-06 (nit, CONTEXT 정합):** CONTEXT.md catalyst 용어가 "실적발표일(KR/US)"로 양쪽 v1 포함을 시사 → **v1은 US 실적일 + KR 공급계약, KR 실적일은 v1.1**로 CONTEXT 갱신(본 plan과 함께 커밋).
+
 ## 다음 Plan
-Plan 6 밸류에이션 기대치(forward-pe 흡수) / Plan 7 정책 렌즈(저PBR). v1.1: KR 다가오는 실적일(네이버), 락업·지수편입.
+Plan 6 밸류에이션 기대치(forward-pe 흡수) / Plan 7 정책 렌즈(저PBR). v1.1: KR 다가오는 실적일(네이버), DART 공급계약 pagination, 락업·지수편입.
