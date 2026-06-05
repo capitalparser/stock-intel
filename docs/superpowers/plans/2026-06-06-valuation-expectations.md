@@ -450,5 +450,16 @@ git commit -m "feat(valuation): render valuation-expectations section + candidat
 ## Cross-model review 예정
 (b) Codex plan 리뷰 → 머지 → Codex 구현 → (a) Opus code 리뷰.
 
+## Cross-model review 반영 v2 (2026-06-06, Codex leg) — **본 섹션이 위 태스크 본문에 우선**
+
+Codex 리뷰: CONDITIONAL, blocker 0, should-fix 6. 반영:
+
+- **F-01 (GAM None 낙하 버그):** `expectation_verdict`에서 `gam is None`(분모≤0 = 제로/음성장)인데 위험 분기(PE≥40)를 안 타면 최종 "정당화 가능"으로 잘못 낙하. **risk 분기 직후 `if gam is None: return _result("데이터 부족", "성장 데이터 부족으로 배수-성장 평가 불가", ...)` 추가.** 테스트: forward_pe=20 + eps/rev=0(또는 음수) → "데이터 부족"(또는 음수+PE≥40이면 "위험").
+- **F-02 (verdict 범위 명시):** 가이던스·리비전 미가용으로 성장/FCF만으로 강한 레이블 발행 → read에 "v1: 성장·FCF only(가이던스/리비전 미반영)" 명시, `data_gaps`에 두 항목 유지(이미 있음). 레이블은 유지하되 범위를 화면에 드러낸다.
+- **F-03 (truthiness 가드):** provider에서 `if (fcf and rev_total)` → `fcf is not None and rev_total not in (None, 0)`(FCF=0 보존). `forward_pe = float(v) if v else None` → `float(v) if (v is not None and float(v) > 0) else None`(음수 forwardPE 차단). 테스트: freeCashflow=0, totalRevenue=0, forwardPE=-3.
+- **F-04 (.KS/.KQ fallback):** `_yf_symbol`이 KR을 `.KS`만 시도 → KOSDAQ(039030·089030 등) `.info` 비어 일괄 데이터부족. **`.KS` 시도 후 forwardPE 등 핵심 필드가 비면 `.KQ` 재시도.** fetch_valuation 내부에서 두 suffix 시도(둘 다 실패 시 데이터 부족). 테스트: KS 빈 dict→KQ 성공 monkeypatch.
+- **F-05 (build_dashboard 전파):** `screeners.build_dashboard`가 `Dashboard(...)` 수동 구성 시 `valuation_expectations=source.valuation_expectations or []` 명시 전달(Plan 2 A-08 동형). 테스트: `build_dashboard(parse_dashboard_input(payload)).valuation_expectations` 비어있지 않음 assert.
+- **F-06 (render 삽입 위치, nit):** `밸류에이션 기대치 점검` 섹션은 **`_dual_regime_html(dashboard)` 직후, macro strip 직전**에 삽입(md도 듀얼 국면 블록 직후).
+
 ## 다음 Plan
 Plan 7 정책 렌즈(저PBR 밸류업, LensKind.POLICY). v1.1: 회사 가이던스 파싱(guidance_delta), estimate-revision 이력, forward EV/EBITDA.
