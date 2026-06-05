@@ -102,6 +102,7 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
     if snap.get("metrics"):
         stock["metrics"] = dict(snap["metrics"])
     _overlay_signature_fields(stock, snap)
+    _overlay_catalysts(stock, snap)
 
     dq = snap.get("data_quality") or {}
     source = snap.get("source", "?")
@@ -149,6 +150,16 @@ def _overlay_signature_fields(stock: dict, snap: dict) -> None:
     short_ratio = _optional_number(snap.get("short_ratio"))
     if short_ratio is not None and short_ratio >= 5.0:
         _append_evidence(stock, f"공매도 비중 높음 (약 {short_ratio:.1f}%)")
+
+
+def _overlay_catalysts(stock: dict, snap: dict) -> None:
+    catalysts = [dict(item) for item in (snap.get("catalysts") or [])]
+    if not catalysts:
+        return
+    stock["catalysts"] = catalysts
+    label = str(catalysts[0].get("label") or "")
+    if label:
+        _append_evidence(stock, f"catalyst: {label}")
 
 
 def _append_gap(stock: dict, message: str) -> None:

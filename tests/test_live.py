@@ -163,6 +163,70 @@ def test_overlay_sets_blocked_and_independence_evidence():
     assert any("공매도" in evidence for evidence in stock["evidence"])
 
 
+def test_overlay_carries_catalysts_and_evidence():
+    payload = {
+        "as_of": "x",
+        "price_time": "x",
+        "market_indicators": [],
+        "lenses": [],
+        "stocks": [
+            {
+                "ticker": "000660",
+                "company": "SK하이닉스",
+                "sector": "반도체",
+                "lens_ids": [],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": [],
+                "gaps": [],
+            }
+        ],
+    }
+    snapshot = {
+        "as_of": "x",
+        "generated_at": "x",
+        "macro": {},
+        "stocks": {
+            "000660": {
+                "price": 210000,
+                "catalysts": [
+                    {
+                        "type": "supply_contract",
+                        "direction": "recent",
+                        "date": "2026-06-01",
+                        "days": 4,
+                        "label": "공급계약 (6/1)",
+                    }
+                ],
+                "metrics": {
+                    "valuation": 55,
+                    "quality": 55,
+                    "growth": 55,
+                    "revision": 55,
+                    "momentum": 55,
+                },
+                "data_quality": {
+                    "missing": [],
+                    "proxy": [],
+                    "errors": [],
+                    "as_of": "x",
+                },
+            }
+        },
+    }
+
+    overlay_snapshot(payload, snapshot)
+
+    stock = payload["stocks"][0]
+    assert stock["catalysts"][0]["label"] == "공급계약 (6/1)"
+    assert any("공급계약" in evidence for evidence in stock["evidence"])
+
+
 def test_load_live_falls_back_to_sample_when_no_snapshot(tmp_path):
     # empty cache dir -> no snapshot -> curated fallback
     source_input, used_snapshot = load_live_dashboard_input(cache_dir=tmp_path)
