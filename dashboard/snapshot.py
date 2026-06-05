@@ -23,6 +23,7 @@ from dashboard.metrics import METRIC_FIELDS, build_metrics
 from dashboard.providers import RawStock, fetch_macro, fetch_raw_stock
 from dashboard.providers.catalyst import fetch_catalysts
 from dashboard.providers.independence_overlay import fetch_independence
+from dashboard.providers.valuation import fetch_valuation
 from dashboard.regime_history import DEFAULT_HISTORY_PATH, append_today, load_history
 
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[1] / "state" / "dashboard" / "cache"
@@ -42,6 +43,7 @@ def build_snapshot(
     macro: Callable[[], dict] = fetch_macro,
     independence: Callable[[str], dict] = fetch_independence,
     catalysts: Callable[[str], list[dict]] = fetch_catalysts,
+    valuation: Callable[[str], dict] = fetch_valuation,
     as_of: str | None = None,
     persist_regime_history: bool = False,
 ) -> dict:
@@ -52,6 +54,10 @@ def build_snapshot(
 
     peer_pe = _peer_pe_by_group(entries, raws)
     group_by_ticker = {e.ticker: e.peer_group for e in entries}
+    valuation_reads = {
+        entry.ticker: _safe_valuation(valuation, entry.ticker)
+        for entry in entries
+    }
 
     stocks: dict[str, dict] = {}
     for ticker, raw in raws.items():
@@ -91,6 +97,7 @@ def build_snapshot(
             "auditor": independence_read.get("auditor") or "",
             "independence_reason": str(independence_read.get("reason") or ""),
             "catalysts": _safe_catalysts(catalysts, ticker),
+            "expectation_verdict": str(valuation_reads.get(ticker, {}).get("verdict") or ""),
             "metrics": result.scores,
             "data_quality": {
                 "missing": missing_fields,
@@ -112,6 +119,7 @@ def build_snapshot(
         "as_of": resolved_as_of,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "macro": macro_payload,
+        "valuation_expectations": list(valuation_reads.values()),
         "stocks": stocks,
     }
 
@@ -132,6 +140,23 @@ def _safe_catalysts(ticker_catalysts: Callable[[str], list[dict]], ticker: str) 
         return [dict(item) for item in (ticker_catalysts(ticker) or [])]
     except Exception:
         return []
+
+
+def _safe_valuation(valuation: Callable[[str], dict], ticker: str) -> dict:
+    try:
+        out = dict(valuation(ticker) or {})
+    except Exception as exc:  # pragma: no cover - defensive degrade
+        out = {
+            "ticker": ticker,
+            "verdict": "데이터 부족",
+            "reason": f"밸류에이션 기대치 overlay 실패: {type(exc).__name__}",
+            "read": "v1: 성장·FCF only (가이던스/리비전 미반영) · 데이터 부족",
+            "data_gaps": ["밸류에이션 기대치 provider 실패"],
+        }
+    out.setdefault("ticker", ticker)
+    out.setdefault("verdict", "데이터 부족")
+    out.setdefault("data_gaps", [])
+    return out
 
 
 def _peer_pe_by_group(

@@ -121,6 +121,31 @@ def test_snapshot_carries_catalysts():
     assert snapshot["stocks"]["000660"]["catalysts"][0]["label"] == "공급계약 (6/1)"
 
 
+def test_snapshot_carries_valuation_expectations_and_stock_verdict():
+    raw = RawStock("NVDA", "US", price=100.0, pe=20.0)
+
+    snapshot = build_snapshot(
+        [UniverseEntry("NVDA", "반도체")],
+        fetch=lambda ticker: raw,
+        macro=_empty_macro,
+        valuation=lambda ticker: {
+            "ticker": ticker,
+            "forward_pe": 20.0,
+            "rev_growth_pct": 20.0,
+            "eps_growth_pct": 20.0,
+            "fcf_margin_pct": 20.0,
+            "verdict": "정당화 가능",
+            "read": "v1: 성장·FCF only",
+            "data_gaps": ["가이던스 데이터 부족"],
+        },
+        as_of="2026-06-06",
+    )
+
+    assert snapshot["valuation_expectations"][0]["ticker"] == "NVDA"
+    assert snapshot["valuation_expectations"][0]["verdict"] == "정당화 가능"
+    assert snapshot["stocks"]["NVDA"]["expectation_verdict"] == "정당화 가능"
+
+
 def test_save_and_load_roundtrip(tmp_path):
     table = {"A": RawStock("A", "US", price=1.0, pe=10, as_of="2026-05-30")}
     snap = build_snapshot(
