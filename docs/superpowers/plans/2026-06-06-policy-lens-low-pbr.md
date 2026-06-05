@@ -342,5 +342,13 @@ Expected: 정책렌즈 True, 저PBR 시드 ≥ 10.
 ## Cross-model review 예정
 (b) Codex plan 리뷰 → 머지 → Codex 구현 → (a) Opus code 리뷰.
 
+## Cross-model review 반영 v2 (2026-06-06, Codex leg) — **본 섹션이 위 태스크 본문에 우선**
+
+Codex 리뷰: blocker 0, should-fix 2 + nit 1. 시드 10코드 전부 정확 확인(460860=동국제강, ≠001230 동국홀딩스). 반영:
+
+- **G-01 (Task 4 통합 테스트):** lens_ids 변이만이 아니라 **screeners linked_lenses 해소까지** 검증. `build_market_insights_payload`→overlay→`parse_dashboard_input`→`build_dashboard` 경로로 PBR<0.5 종목의 candidate.linked_lenses에 "저PBR 밸류업"(name)이 실재하는지 assert. (payload lenses에 정책 렌즈가 있어야 linked로 잡히므로 end-to-end 가드.)
+- **G-02 (insight_lookup 누출 차단):** `insight_lookup._build_index`가 `build_market_insights_payload(include_kr_screen=False)`를 호출 → policy lens/시드를 항상 추가하면 Telegram 인사이트 조회에 저PBR 시드가 새어나감. **`build_market_insights_payload`에 `include_policy_lens: bool = True` 플래그 추가**(Plan 4 `include_kr_screen` 동형), `insight_lookup`은 `include_policy_lens=False`로 호출. 기존 insight_lookup 테스트 회귀 확인. (bot.py/insight_lookup 본문은 호출 인자만 바뀜 — 로직 미변경.)
+- **G-03 (nit, 픽스처):** `_payload_with_policy_lens()`는 인라인으로 최소 payload(as_of, price_time, market_indicators=[], lenses=[정책 렌즈 1개], stocks=[]) 구조를 직접 정의(없는 헬퍼 import 금지).
+
 ## 다음 Plan (전체 dashboard 고도화 완료 후)
 v1.1 백로그: 정책 렌즈 추가 인스턴스(IRA·CHIPS·K-방산), 자사주/배당 catalyst, 진짜 외국인 순매수(네이버), KRX OPEN API 권위값, KR 실적일, 회사 가이던스(guidance_delta).
