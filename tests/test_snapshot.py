@@ -76,6 +76,29 @@ def test_build_snapshot_real_values_clear_gaps():
     assert snap["as_of"] == "2026-05-30"
 
 
+def test_snapshot_carries_independence_and_flow():
+    raw = RawStock("000660", "KR", price=210000, pe=8, net_flow_signal=-1.0, short_ratio=6.2)
+
+    snapshot = build_snapshot(
+        [UniverseEntry("000660", "반도체")],
+        fetch=lambda ticker: raw,
+        macro=_empty_macro,
+        independence=lambda ticker: {
+            "status": "BLOCKED_CONFIRMED",
+            "auditor": "삼정회계법인",
+            "reason": "차단",
+        },
+        as_of="2026-06-05",
+    )
+
+    stock = snapshot["stocks"]["000660"]
+    assert stock["independence_status"] == "BLOCKED_CONFIRMED"
+    assert stock["auditor"] == "삼정회계법인"
+    assert stock["independence_reason"] == "차단"
+    assert stock["net_flow_signal"] == -1.0
+    assert stock["short_ratio"] == 6.2
+
+
 def test_save_and_load_roundtrip(tmp_path):
     table = {"A": RawStock("A", "US", price=1.0, pe=10, as_of="2026-05-30")}
     snap = build_snapshot(

@@ -21,6 +21,7 @@ from typing import Callable, Iterable
 from dashboard.macro_state import build_dual_regime as _build_dual_regime
 from dashboard.metrics import METRIC_FIELDS, build_metrics
 from dashboard.providers import RawStock, fetch_macro, fetch_raw_stock
+from dashboard.providers.independence_overlay import fetch_independence
 from dashboard.regime_history import DEFAULT_HISTORY_PATH, append_today, load_history
 
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[1] / "state" / "dashboard" / "cache"
@@ -38,6 +39,7 @@ def build_snapshot(
     *,
     fetch: Callable[[str], RawStock] = fetch_raw_stock,
     macro: Callable[[], dict] = fetch_macro,
+    independence: Callable[[str], dict] = fetch_independence,
     as_of: str | None = None,
     persist_regime_history: bool = False,
 ) -> dict:
@@ -51,6 +53,7 @@ def build_snapshot(
 
     stocks: dict[str, dict] = {}
     for ticker, raw in raws.items():
+        independence_read = _independence_read(ticker, independence)
         group = group_by_ticker.get(ticker, "")
         ppe = peer_pe.get(group)
         result = build_metrics(
@@ -81,6 +84,10 @@ def build_snapshot(
             "peer_pe": _round(ppe, 1),
             "peer_group": group,
             "short_ratio": _round(raw.short_ratio, 2),
+            "net_flow_signal": _round(raw.net_flow_signal, 2),
+            "independence_status": str(independence_read.get("status") or ""),
+            "auditor": independence_read.get("auditor") or "",
+            "independence_reason": str(independence_read.get("reason") or ""),
             "metrics": result.scores,
             "data_quality": {
                 "missing": missing_fields,
@@ -104,6 +111,17 @@ def build_snapshot(
         "macro": macro_payload,
         "stocks": stocks,
     }
+
+
+def _independence_read(ticker: str, independence: Callable[[str], dict]) -> dict:
+    try:
+        return independence(ticker) or {}
+    except Exception as exc:  # pragma: no cover - defensive degrade
+        return {
+            "status": "DATA_MISSING",
+            "auditor": "",
+            "reason": f"독립성 overlay 실패: {type(exc).__name__}",
+        }
 
 
 def _peer_pe_by_group(
