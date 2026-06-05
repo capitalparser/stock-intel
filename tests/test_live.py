@@ -56,10 +56,23 @@ def _snapshot():
             },
             "errors": [],
         },
+        "valuation_expectations": [
+            {
+                "ticker": "NVDA",
+                "forward_pe": 20.0,
+                "rev_growth_pct": 20.0,
+                "eps_growth_pct": 20.0,
+                "fcf_margin_pct": 20.0,
+                "verdict": "정당화 가능",
+                "read": "v1: 성장·FCF only",
+                "data_gaps": [],
+            }
+        ],
         "stocks": {
             "NVDA": {
                 "source": "US", "price": 950.0, "day_change_pct": 2.1, "pe": 45.0,
                 "pbr": 40.0, "peer_pe": 30.0, "peer_group": "Semis",
+                "expectation_verdict": "정당화 가능",
                 "metrics": {"valuation": 30, "quality": 88, "growth": 90,
                             "revision": 62, "momentum": 75},
                 "data_quality": {"missing": [], "proxy": ["revision"], "errors": [],
@@ -88,6 +101,9 @@ def test_overlay_replaces_quant_fields_and_macro():
     assert payload["market_indicators"][0]["symbol"] == "SPY"
     assert payload["dual_regime"]["kr"]["regime"] == "conditional"
     assert payload["as_of"] == "2026-05-30"
+    assert payload["valuation_expectations"][0]["verdict"] == "정당화 가능"
+    assert nvda["expectation_verdict"] == "정당화 가능"
+    assert any("밸류에이션 기대치: 정당화 가능" in e for e in nvda["evidence"])
 
 
 def test_overlay_flags_ticker_absent_from_snapshot():

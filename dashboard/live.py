@@ -82,6 +82,8 @@ def overlay_snapshot(payload: dict, snapshot: dict) -> dict:
     payload["as_of"] = snapshot.get("as_of", payload.get("as_of"))
     if snapshot.get("generated_at"):
         payload["price_time"] = snapshot["generated_at"]
+    if snapshot.get("valuation_expectations") is not None:
+        payload["valuation_expectations"] = deepcopy(snapshot.get("valuation_expectations") or [])
 
     snap_stocks = snapshot.get("stocks") or {}
     for stock in payload.get("stocks", []):
@@ -101,6 +103,7 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
         stock["peer_group"] = snap["peer_group"]
     if snap.get("metrics"):
         stock["metrics"] = dict(snap["metrics"])
+    _overlay_expectation_verdict(stock, snap)
     _overlay_signature_fields(stock, snap)
     _overlay_catalysts(stock, snap)
 
@@ -116,6 +119,14 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
     proxy = dq.get("proxy") or []
     if "revision" in proxy:
         _append_evidence(stock, "이익상향(revision)은 수급·추세 기반 프록시 — 컨센서스 실데이터 아님")
+
+
+def _overlay_expectation_verdict(stock: dict, snap: dict) -> None:
+    verdict = str(snap.get("expectation_verdict") or "")
+    if not verdict:
+        return
+    stock["expectation_verdict"] = verdict
+    _append_evidence(stock, f"밸류에이션 기대치: {verdict}")
 
 
 def _overlay_signature_fields(stock: dict, snap: dict) -> None:
