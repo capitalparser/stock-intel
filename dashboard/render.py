@@ -129,6 +129,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 80px; }
 .hbadge.bhi  { background: rgba(34,197,94,0.12);  color: var(--up); }
 .hbadge.bmid { background: rgba(59,130,246,0.12); color: var(--accent); }
 .hbadge.bneu { background: rgba(148,163,184,0.08);color: var(--muted); }
+.hbadge.bbad { background: rgba(239,68,68,0.14); color: var(--down); }
 .hcell-risk { font-size: 10px; color: var(--muted); font-style: italic; }
 .stabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 .stab {
@@ -293,6 +294,7 @@ function renderCards() {
     const {txt:chT,cls:chC} = fmtC(c.change);
     const id = 'sp-'+c.ticker;
     const lh = (c.lenses||[]).map(l=>`<span class="ltag">${l}</span>`).join('');
+    const ib = c.independence_badge ? `<span class="hbadge ${c.independence_badge.cls}">${c.independence_badge.text}</span>` : '';
     const div = document.createElement('div');
     div.className = 'ccard';
     div.dataset.tags = JSON.stringify(c.tags||[]);
@@ -312,7 +314,7 @@ function renderCards() {
         <span class="score-num">${c.score}</span>
       </div>
       <div class="cc-spark"><canvas id="${id}"></canvas></div>
-      <div class="cc-lenses">${lh}</div>`;
+      <div class="cc-lenses">${ib}${lh}</div>`;
     div.addEventListener('click',()=>openDetail(c));
     grid.appendChild(div);
     requestAnimationFrame(()=>drawSpark(id,c.spark));
@@ -449,8 +451,10 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
     ]
     for candidate in _top_candidates(dashboard)[:10]:
         view_names = ", ".join(lens.name for lens in candidate.linked_lenses)
+        badge = _independence_badge_text(candidate)
+        badge_prefix = f"{badge} " if badge else ""
         lines.append(
-            f"- {_markdown_stock_label(candidate)}: "
+            f"- {badge_prefix}{_markdown_stock_label(candidate)}: "
             f"{_status_label(candidate)}, 매력도 {candidate.score:.1f}, "
             f"가격 {_money(candidate.price)}, PER {_multiple(candidate.pe)} "
             f"(동종군 {_multiple(candidate.peer_pe)}), 연결 관점 {view_names}"
@@ -521,6 +525,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
             "status": c.status.value.lower(),
             "status_label": STATUS_LABELS.get(c.status.value, c.status.value),
             "lenses": [lns.name for lns in c.linked_lenses],
+            "independence_badge": _independence_badge_payload(c),
             # Lazy Alpha: DB에서 자동 주입. DB 없거나 종목 없으면 null.
             "lazy": lazy_map.get(c.ticker),
         }
@@ -730,6 +735,29 @@ def _markdown_stock_label(candidate: Candidate) -> str:
     if _is_kr_stock(candidate):
         return f"{candidate.company} ({candidate.ticker})"
     return f"{candidate.ticker} {candidate.company}"
+
+
+def _independence_badge_text(candidate: Candidate) -> str:
+    status = candidate.independence_status
+    if status in {"BLOCKED_CONFIRMED", "BLOCKED_POSSIBLE"}:
+        return "🚫 독립성 차단"
+    if status in {
+        "MANUAL_VERIFY",
+        "MANUAL_VERIFY_CURRENT_YEAR",
+        "ROLLOVER_INFERRED",
+        "DATA_MISSING",
+        "UNKNOWN_MARKET",
+    }:
+        return "🟡 독립성 확인 필요"
+    return ""
+
+
+def _independence_badge_payload(candidate: Candidate) -> dict[str, str] | None:
+    text = _independence_badge_text(candidate)
+    if not text:
+        return None
+    css_class = "bbad" if text.startswith("🚫") else "bneu"
+    return {"text": text, "cls": css_class}
 
 
 def _is_kr_stock(candidate: Candidate) -> bool:

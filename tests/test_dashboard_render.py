@@ -198,6 +198,65 @@ def test_render_dashboard_includes_unpriced_market_insight_stocks_as_cards(tmp_p
     assert '"thesis": "두산에너빌리티: AI 전력 병목 관점' in html
 
 
+def test_render_shows_independence_badges():
+    dashboard_input = parse_dashboard_input(
+        {
+            "as_of": "2026-06-05",
+            "price_time": "2026-06-05T00:00:00+09:00",
+            "market_indicators": [],
+            "lenses": [],
+            "stocks": [
+                {
+                    "ticker": "000660",
+                    "company": "SK하이닉스",
+                    "sector": "반도체",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 50,
+                        "quality": 50,
+                        "growth": 50,
+                        "revision": 50,
+                        "momentum": 50,
+                    },
+                    "evidence": ["blocked"],
+                    "gaps": [],
+                    "blocked": True,
+                    "independence_status": "BLOCKED_CONFIRMED",
+                    "auditor": "삼정회계법인",
+                },
+                {
+                    "ticker": "NVDA",
+                    "company": "NVIDIA",
+                    "sector": "Semis",
+                    "lens_ids": [],
+                    "metrics": {
+                        "valuation": 50,
+                        "quality": 50,
+                        "growth": 50,
+                        "revision": 50,
+                        "momentum": 50,
+                    },
+                    "evidence": ["manual"],
+                    "gaps": [],
+                    "independence_status": "MANUAL_VERIFY",
+                },
+            ],
+        }
+    )
+    dashboard = build_dashboard(dashboard_input)
+
+    markdown = render_dashboard_markdown(dashboard)
+    html = render_dashboard_html(dashboard, db_path="/tmp/missing-stock-intel-state.db")
+
+    assert "🚫" in markdown and "독립성 차단" in markdown
+    assert "🟡" in markdown and "독립성 확인 필요" in markdown
+    assert "🚫" in html and "독립성 차단" in html
+    assert "🟡" in html and "독립성 확인 필요" in html
+    assert ".hbadge.bbad" in html
+    assert '"cls": "bbad"' in html
+    assert '"cls": "bneu"' in html
+
+
 def test_write_dashboard_reports_creates_html_and_markdown(tmp_path):
     # Force curated sample for a deterministic as_of date (no snapshot dependency).
     html_path, md_path, used_snapshot = write_dashboard_reports(
