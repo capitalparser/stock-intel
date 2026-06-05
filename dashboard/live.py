@@ -18,6 +18,7 @@ from dashboard.market_insights import (
     build_market_insights_payload,
 )
 from dashboard.models import DashboardInput, parse_dashboard_input
+from dashboard.providers.independence_overlay import independence_flag
 from dashboard.snapshot import (
     DEFAULT_CACHE_DIR,
     UniverseEntry,
@@ -100,6 +101,7 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
         stock["peer_group"] = snap["peer_group"]
     if snap.get("metrics"):
         stock["metrics"] = dict(snap["metrics"])
+    _overlay_signature_fields(stock, snap)
 
     dq = snap.get("data_quality") or {}
     source = snap.get("source", "?")
@@ -115,6 +117,40 @@ def _overlay_stock(stock: dict, snap: dict) -> None:
         _append_evidence(stock, "이익상향(revision)은 수급·추세 기반 프록시 — 컨센서스 실데이터 아님")
 
 
+def _overlay_signature_fields(stock: dict, snap: dict) -> None:
+    status = str(snap.get("independence_status") or "")
+    auditor = str(snap.get("auditor") or "")
+    reason = str(snap.get("independence_reason") or "")
+    if status:
+        stock["independence_status"] = status
+        stock["auditor"] = auditor
+        flag, blocked = independence_flag(status)
+        if blocked:
+            stock["blocked"] = True
+        if flag:
+            parts = [flag]
+            if auditor:
+                parts.append(auditor)
+            if reason:
+                parts.append(reason)
+            _append_evidence(stock, " · ".join(parts))
+        elif status == "CLEAR_CONFIRMED":
+            parts = ["🟢 독립성 확인"]
+            if auditor:
+                parts.append(auditor)
+            if reason:
+                parts.append(reason)
+            _append_evidence(stock, " · ".join(parts))
+
+    net_flow = _optional_number(snap.get("net_flow_signal"))
+    if net_flow is not None and net_flow < 0:
+        _append_evidence(stock, "수급: 기관·외국인 순매도")
+
+    short_ratio = _optional_number(snap.get("short_ratio"))
+    if short_ratio is not None and short_ratio >= 5.0:
+        _append_evidence(stock, f"공매도 비중 높음 (약 {short_ratio:.1f}%)")
+
+
 def _append_gap(stock: dict, message: str) -> None:
     gaps = list(stock.get("gaps") or [])
     if message not in gaps:
@@ -127,3 +163,9 @@ def _append_evidence(stock: dict, message: str) -> None:
     if message not in evidence:
         evidence.append(message)
     stock["evidence"] = evidence
+
+
+def _optional_number(value) -> float | None:
+    if value is None:
+        return None
+    return float(value)

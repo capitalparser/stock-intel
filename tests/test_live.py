@@ -99,6 +99,70 @@ def test_overlay_flags_ticker_absent_from_snapshot():
     assert "price" not in missing or missing.get("price") is None
 
 
+def test_overlay_sets_blocked_and_independence_evidence():
+    payload = {
+        "as_of": "x",
+        "price_time": "x",
+        "market_indicators": [],
+        "lenses": [],
+        "stocks": [
+            {
+                "ticker": "000660",
+                "company": "SK하이닉스",
+                "sector": "반도체",
+                "lens_ids": [],
+                "metrics": {
+                    "valuation": 50,
+                    "quality": 50,
+                    "growth": 50,
+                    "revision": 50,
+                    "momentum": 50,
+                },
+                "evidence": [],
+                "gaps": [],
+            }
+        ],
+    }
+    snapshot = {
+        "as_of": "x",
+        "generated_at": "x",
+        "macro": {},
+        "stocks": {
+            "000660": {
+                "price": 210000,
+                "independence_status": "BLOCKED_CONFIRMED",
+                "auditor": "삼정회계법인",
+                "independence_reason": "차단",
+                "net_flow_signal": -1.0,
+                "short_ratio": 6.2,
+                "metrics": {
+                    "valuation": 60,
+                    "quality": 55,
+                    "growth": 55,
+                    "revision": 55,
+                    "momentum": 55,
+                },
+                "data_quality": {
+                    "missing": [],
+                    "proxy": [],
+                    "errors": [],
+                    "as_of": "x",
+                },
+            }
+        },
+    }
+
+    overlay_snapshot(payload, snapshot)
+
+    stock = payload["stocks"][0]
+    assert stock["blocked"] is True
+    assert stock["independence_status"] == "BLOCKED_CONFIRMED"
+    assert stock["auditor"] == "삼정회계법인"
+    assert any("독립성 차단" in evidence for evidence in stock["evidence"])
+    assert any("순매도" in evidence for evidence in stock["evidence"])
+    assert any("공매도" in evidence for evidence in stock["evidence"])
+
+
 def test_load_live_falls_back_to_sample_when_no_snapshot(tmp_path):
     # empty cache dir -> no snapshot -> curated fallback
     source_input, used_snapshot = load_live_dashboard_input(cache_dir=tmp_path)
