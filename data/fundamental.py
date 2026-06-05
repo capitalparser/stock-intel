@@ -153,7 +153,7 @@ def _fetch_dart_financials(ticker: str) -> list[dict]:
     if not api_key:
         return []
 
-    corp_code = _find_corp_code(api_key, ticker)
+    corp_code = find_corp_code(api_key, ticker)
     if not corp_code:
         return []
 
@@ -171,7 +171,7 @@ def _fetch_dart_financials(ticker: str) -> list[dict]:
     return sorted(rows, key=lambda row: row["year"])
 
 
-def _find_corp_code(api_key: str, ticker: str) -> str | None:
+def find_corp_code(api_key: str, ticker: str) -> str | None:
     xml_bytes = _load_corp_code_xml(api_key)
     root = ElementTree.fromstring(xml_bytes)
     for item in root.findall("list"):
@@ -179,6 +179,10 @@ def _find_corp_code(api_key: str, ticker: str) -> str | None:
         if stock_code == ticker:
             return (item.findtext("corp_code") or "").strip() or None
     return None
+
+
+def _find_corp_code(api_key: str, ticker: str) -> str | None:
+    return find_corp_code(api_key, ticker)
 
 
 def _load_corp_code_xml(api_key: str) -> bytes:
