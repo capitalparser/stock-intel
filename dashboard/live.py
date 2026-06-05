@@ -2,7 +2,7 @@
 
 Qualitative content (thesis, bull/bear, lens mapping, the universe itself)
 stays curated in ``SAMPLE_DASHBOARD``/vault. The quantitative fields
-(metrics, price, day change, PER, peer PER, macro indicators, regime) are
+(metrics, price, day change, PER, peer PER, macro indicators, dual regime) are
 overlaid from the cached real-data snapshot. Fields the snapshot could not
 source are flagged as explicit data gaps so the UI never shows a fabricated
 number as if it were real.
@@ -74,12 +74,6 @@ def overlay_snapshot(payload: dict, snapshot: dict) -> dict:
     indicators = macro.get("market_indicators")
     if indicators:
         payload["market_indicators"] = deepcopy(indicators)
-    regime = macro.get("regime")
-    if regime and regime.get("verdict"):
-        payload["regime"] = deepcopy(regime)
-    macro_state = macro.get("macro_state")
-    if macro_state and macro_state.get("current_state"):
-        payload["macro_state"] = deepcopy(macro_state)
     dual_regime = macro.get("dual_regime")
     if dual_regime and dual_regime.get("us") and dual_regime.get("kr"):
         payload["dual_regime"] = deepcopy(dual_regime)

@@ -12,10 +12,6 @@ def _minimal_payload():
     return {
         "as_of": "2026-05-29",
         "price_time": "seed",
-        "regime": {
-            "verdict": "conditional", "risk_appetite": "neutral", "rates": "stable",
-            "dollar": "stable", "volatility": "low", "notes": [],
-        },
         "market_indicators": [],
         "lenses": [],
         "stocks": [
@@ -45,17 +41,6 @@ def _snapshot():
                 {"symbol": "SPY", "name": "S&P", "group": "대형주",
                  "price": 680.0, "day_change_pct": 0.5, "read": "ok"}
             ],
-            "regime": {"verdict": "risk-on", "risk_appetite": "risk-on", "rates": "stable",
-                       "dollar": "stable", "volatility": "low", "notes": ["VIX 14"]},
-            "macro_state": {
-                "current_state": "fragile rally",
-                "why_it_matters": "fixture",
-                "next_action": "후보 압축",
-                "indicator_reads": [],
-                "issues": [],
-                "watchlist_impact": {},
-                "data_gaps": [],
-            },
             "dual_regime": {
                 "as_of": "2026-05-30",
                 "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
@@ -100,9 +85,7 @@ def test_overlay_replaces_quant_fields_and_macro():
     assert nvda["gaps"] == ["seed gap"]
 
     # macro overlaid
-    assert payload["regime"]["verdict"] == "risk-on"
     assert payload["market_indicators"][0]["symbol"] == "SPY"
-    assert payload["macro_state"]["current_state"] == "fragile rally"
     assert payload["dual_regime"]["kr"]["regime"] == "conditional"
     assert payload["as_of"] == "2026-05-30"
 

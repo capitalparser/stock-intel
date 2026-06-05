@@ -87,7 +87,7 @@ def test_dispatch_routes_to_us(monkeypatch):
     assert raw.source == "US"
 
 
-def test_fetch_macro_includes_macro_state_from_expanded_indicators(monkeypatch):
+def test_fetch_macro_includes_dual_regime_indicator_inputs(monkeypatch):
     from dashboard.providers import macro as macro_provider
 
     def fake_load_quotes(symbols):
@@ -106,12 +106,25 @@ def test_fetch_macro_includes_macro_state_from_expanded_indicators(monkeypatch):
         }
 
     monkeypatch.setattr(macro_provider, "_load_quotes", fake_load_quotes)
+    monkeypatch.setattr(
+        macro_provider,
+        "fetch_kr_quotes",
+        lambda: {
+            "KOSPI": {"closes": [100.0 + i for i in range(60)], "day_change_pct": 0.4},
+            "KOSDAQ": {"closes": [100.0 + i * 1.2 for i in range(60)]},
+            "USDKRW=X": {"closes": [1300.0 + i for i in range(60)]},
+            "EWY": {"closes": [60.0 + i * 0.1 for i in range(60)]},
+        },
+    )
 
     payload = macro_provider.fetch_macro()
 
-    assert payload["macro_state"]["current_state"] == "fragile rally"
+    assert "regime" not in payload
+    assert "macro_state" not in payload
     assert any(item["symbol"] == "S5FI" for item in payload["market_indicators"])
     assert any(item["symbol"] == "BZ=F" for item in payload["market_indicators"])
+    assert any(item["symbol"] == "SPY" for item in payload["_us_indicators"])
+    assert any(item["symbol"] == "KOSPI_BREADTH" for item in payload["_kr_indicators"])
 
 
 def test_fetch_macro_indicators_carry_series(monkeypatch):

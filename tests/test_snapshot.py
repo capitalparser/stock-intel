@@ -90,32 +90,6 @@ def test_save_and_load_roundtrip(tmp_path):
     assert load_latest_snapshot(tmp_path / "does_not_exist") is None
 
 
-def test_build_snapshot_carries_macro_state_payload():
-    table = {"TEST": RawStock("TEST", "US", price=10.0, pe=12.0, as_of="2026-06-03")}
-
-    snapshot = build_snapshot(
-        [UniverseEntry("TEST", "fixture")],
-        fetch=_fake_fetch_factory(table),
-        macro=lambda: {
-            "market_indicators": [],
-            "regime": {},
-            "macro_state": {
-                "current_state": "conditional",
-                "why_it_matters": "fixture",
-                "next_action": "fixture",
-                "indicator_reads": [],
-                "issues": [],
-                "watchlist_impact": {},
-                "data_gaps": [],
-            },
-            "errors": [],
-        },
-        as_of="2026-06-03",
-    )
-
-    assert snapshot["macro"]["macro_state"]["current_state"] == "conditional"
-
-
 def _dual_us_indicators():
     return [
         {

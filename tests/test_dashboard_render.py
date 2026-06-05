@@ -11,14 +11,6 @@ def _dual_regime_dashboard():
         {
             "as_of": "2026-06-04",
             "price_time": "2026-06-04T00:00:00+09:00",
-            "regime": {
-                "verdict": "conditional",
-                "risk_appetite": "neutral",
-                "rates": "stable",
-                "dollar": "stable",
-                "volatility": "normal",
-                "notes": [],
-            },
             "market_indicators": [],
             "dual_regime": {
                 "as_of": "2026-06-04",
@@ -66,7 +58,6 @@ def test_render_dashboard_html_contains_core_sections_and_no_raw_json():
 
     assert "<!doctype html>" in html
     assert "개인 투자 상황판" in html
-    assert "시장 국면" in html
     assert "투자 관점 지도" in html
     assert "시장 온도판" in html
     assert "전체 종목 총괄표" in html
@@ -89,7 +80,6 @@ def test_render_dashboard_markdown_is_compact_briefing():
     text = render_dashboard_markdown(dashboard)
 
     assert text.startswith("# 개인 투자 상황판")
-    assert "## 시장 국면" in text
     assert "## 시장 온도판" in text
     assert "## 상위 후보" in text
     assert "핵심 판단" in text
@@ -97,35 +87,6 @@ def test_render_dashboard_markdown_is_compact_briefing():
     assert "PER" in text
     assert "동종군" in text
     assert "ON" in text
-
-
-def test_render_dashboard_html_contains_macro_state_cockpit():
-    dashboard = build_dashboard(load_sample_dashboard_input())
-
-    html = render_dashboard_html(dashboard)
-
-    assert "매크로 현재 상태" in html
-    assert "현재 상태" in html
-    assert "오늘의 주요 이슈" in html
-    assert "시장 폭" in html
-    assert "시장 심리" in html
-    assert "금리" in html
-    assert "환율" in html
-    assert "원자재" in html
-    assert "유가" in html
-    assert "종목 후보 영향" in html
-    assert "macro_state" not in html
-    assert "Issue Card" not in html
-
-
-def test_render_dashboard_markdown_contains_macro_state_brief():
-    dashboard = build_dashboard(load_sample_dashboard_input())
-
-    text = render_dashboard_markdown(dashboard)
-
-    assert "## 매크로 현재 상태" in text
-    assert "## 오늘의 주요 이슈" in text
-    assert "## 종목 후보 영향" in text
 
 
 def test_markdown_renders_dual_regime():

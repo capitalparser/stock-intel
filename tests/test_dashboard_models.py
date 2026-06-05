@@ -110,63 +110,6 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert CandidateStatus.WATCH.value == "Watch"
 
 
-def test_parse_dashboard_input_accepts_macro_state_payload():
-    payload = {
-        "as_of": "2026-06-03",
-        "regime": {
-            "verdict": "conditional",
-            "risk_appetite": "risk-on",
-            "rates": "rising",
-            "dollar": "stable",
-            "volatility": "elevated",
-            "notes": ["지수는 강하지만 유가와 금리가 경고"],
-        },
-        "price_time": "2026-06-03T00:00:00+00:00",
-        "market_indicators": [],
-        "macro_state": {
-            "current_state": "fragile rally",
-            "why_it_matters": "지수는 강하지만 breadth·금리·유가 중 일부가 랠리의 질을 의심하는 구간",
-            "next_action": "신규 진입 강도를 낮추고 후보를 압축",
-            "indicator_reads": [
-                {
-                    "dimension": "breadth",
-                    "label": "시장 폭",
-                    "state": "warning",
-                    "read": "시장 폭 경고 신호",
-                    "symbols": ["S5FI"],
-                }
-            ],
-            "issues": [
-                {
-                    "theme": "지정학",
-                    "title": "협상 신뢰도 약화",
-                    "state": "unresolved",
-                    "summary": "유가와 금리가 의심",
-                    "triggers": ["Brent 95달러"],
-                    "source_gaps": ["당사자 구속력"],
-                }
-            ],
-            "watchlist_impact": {
-                "growth_ai": "chase 제한",
-                "cyclicals": "금리·유가 확인 후 압축",
-                "energy_defense": "상대강도 관찰",
-                "korea": "USDKRW·유가 부담 점검",
-            },
-            "data_gaps": [],
-        },
-        "lenses": [],
-        "stocks": [],
-    }
-
-    parsed = parse_dashboard_input(payload)
-
-    assert parsed.macro_state is not None
-    assert parsed.macro_state.current_state == "fragile rally"
-    assert parsed.macro_state.indicator_reads[0].label == "시장 폭"
-    assert parsed.macro_state.issues[0].theme == "지정학"
-    assert parsed.macro_state.watchlist_impact.growth_ai == "chase 제한"
-
-
 def test_sample_dashboard_input_contains_initial_lens_set():
     parsed = load_sample_dashboard_input()
 
@@ -292,3 +235,31 @@ def test_parse_dashboard_input_accepts_dual_regime_payload():
     assert parsed.dual_regime is not None
     assert parsed.dual_regime.kr.regime == "conditional"
     assert parsed.dual_regime.kr.axis_reads[0].source_kind == "proxy"
+
+
+def test_parse_dashboard_input_allows_absent_legacy_regime():
+    parsed = parse_dashboard_input(
+        {
+            "as_of": "2026-06-05",
+            "price_time": "2026-06-05T00:00:00+09:00",
+            "market_indicators": [],
+            "dual_regime": {
+                "as_of": "2026-06-05",
+                "us": {"market": "US", "regime": "risk-on", "why_it_matters": "US",
+                       "next_action": "검토", "axis_reads": [], "data_gaps": []},
+                "kr": {"market": "KR", "regime": "conditional", "why_it_matters": "KR",
+                       "next_action": "압축", "axis_reads": [], "data_gaps": []},
+                "transitions": {
+                    "us": {"changed": False, "from": None, "to": "risk-on",
+                           "streak": 1, "whipsaw": False, "axis_changes": []},
+                    "kr": {"changed": False, "from": None, "to": "conditional",
+                           "streak": 1, "whipsaw": False, "axis_changes": []},
+                },
+            },
+            "lenses": [],
+            "stocks": [],
+        }
+    )
+
+    assert parsed.regime is None
+    assert parsed.dual_regime is not None

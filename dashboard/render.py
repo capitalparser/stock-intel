@@ -436,35 +436,6 @@ def render_dashboard_markdown(dashboard: Dashboard) -> str:
         lines.extend(_dual_regime_markdown_lines(dashboard))
         lines.append("")
     lines += [
-        "## 시장 국면",
-        f"- 현재 판단: {_regime_value(dashboard.regime.verdict)}",
-        f"- 위험자산 선호: {_regime_value(dashboard.regime.risk_appetite)}",
-        f"- 금리: {_regime_value(dashboard.regime.rates)}",
-        f"- 달러: {_regime_value(dashboard.regime.dollar)}",
-        f"- 변동성: {_regime_value(dashboard.regime.volatility)}",
-    ]
-    if dashboard.macro_state:
-        state = dashboard.macro_state
-        lines += [
-            "",
-            "## 매크로 현재 상태",
-            f"- 현재 상태: {_macro_current_state_label(state.current_state)}",
-            f"- 왜 중요한가: {state.why_it_matters}",
-            f"- 다음 행동: {state.next_action}",
-            "",
-            "## 오늘의 주요 이슈",
-        ]
-        for issue in state.issues:
-            lines.append(f"- {issue.theme}: {issue.title} · {issue.summary}")
-        lines += [
-            "",
-            "## 종목 후보 영향",
-            f"- 성장/AI: {state.watchlist_impact.growth_ai}",
-            f"- 경기민감: {state.watchlist_impact.cyclicals}",
-            f"- 에너지/방산: {state.watchlist_impact.energy_defense}",
-            f"- 한국시장: {state.watchlist_impact.korea}",
-        ]
-    lines += [
         "",
         "## 시장 온도판",
     ]
@@ -507,14 +478,7 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
     setup_count = sum(1 for c in dashboard.candidates if c.status.value == "Setup")
     research_count = sum(1 for c in dashboard.candidates if c.status.value == "Research")
 
-    verdict = escape(_regime_value(dashboard.regime.verdict))
-    risk_kpi = escape(_regime_value(dashboard.regime.risk_appetite))
-
-    # Regime notes
-    regime_notes = "\n".join(
-        f'    <div class="regime-note">{escape(n)}</div>'
-        for n in dashboard.regime.notes
-    )
+    risk_kpi = escape(_dual_topbar_label(dashboard))
 
     # Macro KPI cards
     macro_cards = "\n".join(_mkpi_card(item) for item in dashboard.market_indicators)
@@ -600,23 +564,13 @@ def render_dashboard_html(dashboard: Dashboard, db_path: str | Path | None = Non
 </header>
 <main>
 {_dual_regime_html(dashboard)}
-{_macro_state_html(dashboard)}
-  <div class="sh" style="margin-top:0"><h2>시장 국면</h2></div>
   <div class="macro-strip">
-    <div class="mkpi verdict">
-      <div class="mkpi-label">현재 판단</div>
-      <div class="mkpi-val">{verdict}</div>
-      <div class="mkpi-sub up">{risk_kpi}</div>
-    </div>
 {macro_cards}
     <div class="mkpi">
       <div class="mkpi-label">관찰 종목</div>
       <div class="mkpi-val">{candidate_count}</div>
       <div class="mkpi-sub neut">가격 {priced_count}개 · 근거 보강 {research_count}개</div>
     </div>
-  </div>
-  <div class="regime-notes">
-{regime_notes}
   </div>
 
   <div class="sh"><h2>시장 온도판</h2></div>
@@ -693,6 +647,13 @@ def _dual_regime_html(dashboard: Dashboard) -> str:
 """
 
 
+def _dual_topbar_label(dashboard: Dashboard) -> str:
+    dual = dashboard.dual_regime
+    if not dual:
+        return "국면 확인 필요"
+    return f"US {_regime_label_kr(dual.us.regime)} · KR {_regime_label_kr(dual.kr.regime)}"
+
+
 def _market_regime_html(title: str, market, transition) -> str:
     axes = "\n".join(_axis_read_html(axis) for axis in market.axis_reads)
     whipsaw = " h-mid" if getattr(transition, "whipsaw", False) else ""
@@ -753,80 +714,6 @@ def _pctile_read(value: float | None) -> str:
     if value is None:
         return "백분위 확인 필요"
     return f"백분위 {value * 100:.0f}%"
-
-
-def _macro_state_html(dashboard: Dashboard) -> str:
-    state = dashboard.macro_state
-    if not state:
-        return ""
-    indicators = "\n".join(
-        f"""    <div class="mkpi">
-      <div class="mkpi-label">{escape(item.label)}</div>
-      <div class="mkpi-val">{escape(_macro_state_label(item.state))}</div>
-      <div class="mkpi-sub neut">{escape(item.read)}</div>
-    </div>"""
-        for item in state.indicator_reads
-    )
-    issues = "\n".join(
-        f"""    <div class="hcell h-neu">
-      <div class="hcell-name">{escape(issue.theme)} · {escape(issue.title)}</div>
-      <div class="d-thesis">{escape(issue.summary)}</div>
-      <div class="hcell-risk">주의 트리거: {escape(" · ".join(issue.triggers) or "확인 필요")}</div>
-      <div class="hcell-risk">접근 갭: {escape(" · ".join(issue.source_gaps) or "없음")}</div>
-    </div>"""
-        for issue in state.issues
-    )
-    impact = state.watchlist_impact
-    return f"""
-  <div class="sh" style="margin-top:0"><h2>매크로 현재 상태</h2></div>
-  <div class="macro-strip">
-    <div class="mkpi verdict">
-      <div class="mkpi-label">현재 상태</div>
-      <div class="mkpi-val">{escape(_macro_current_state_label(state.current_state))}</div>
-      <div class="mkpi-sub neut">{escape(state.next_action)}</div>
-    </div>
-    <div class="mkpi" style="min-width:360px">
-      <div class="mkpi-label">왜 중요한가</div>
-      <div class="mkpi-sub neut">{escape(state.why_it_matters)}</div>
-    </div>
-  </div>
-
-  <div class="sh"><h2>오늘의 주요 이슈</h2></div>
-  <div class="heatmap">
-{issues}
-  </div>
-
-  <div class="sh"><h2>시장 지표 판정</h2></div>
-  <div class="macro-strip">
-{indicators}
-  </div>
-
-  <div class="sh"><h2>종목 후보 영향</h2></div>
-  <div class="regime-notes">
-    <div class="regime-note">성장/AI: {escape(impact.growth_ai)}</div>
-    <div class="regime-note">경기민감: {escape(impact.cyclicals)}</div>
-    <div class="regime-note">에너지/방산: {escape(impact.energy_defense)}</div>
-    <div class="regime-note">한국시장: {escape(impact.korea)}</div>
-  </div>
-"""
-
-
-def _macro_current_state_label(value: str) -> str:
-    return {
-        "risk-on": "위험자산 우호",
-        "conditional": "조건부",
-        "risk-off": "위험 회피",
-        "fragile rally": "취약한 랠리",
-    }.get(value, value)
-
-
-def _macro_state_label(value: str) -> str:
-    return {
-        "supportive": "우호",
-        "warning": "경고",
-        "stressed": "압박",
-        "unavailable": "확인 필요",
-    }.get(value, value)
 
 
 def _display_name(candidate: Candidate) -> str:
@@ -1111,23 +998,6 @@ def _state_class(candidate: Candidate) -> str:
         "Blocked": "state-blocked",
         "Avoid": "state-avoid",
     }.get(candidate.status.value, "state-watch")
-
-
-def _regime_value(value: str) -> str:
-    return {
-        "conditional": "조건부 긍정",
-        "pass": "긍정",
-        "fail": "부정",
-        "risk-on": "위험 선호",
-        "neutral": "중립",
-        "risk-off": "위험 회피",
-        "stable": "유지",
-        "down": "하락",
-        "up": "상승",
-        "low": "낮음",
-        "normal": "보통",
-        "high": "높음",
-    }.get(value, value)
 
 
 def _money(value: float | None) -> str:

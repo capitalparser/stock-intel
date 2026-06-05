@@ -35,7 +35,10 @@ def main() -> None:
     with_errors = sum(1 for s in stocks.values() if s["data_quality"]["errors"])
     macro_n = len(snapshot["macro"].get("market_indicators", []))
     print(f"Fetched {len(stocks)} stocks — {priced} priced, {with_errors} with fetch errors.")
-    print(f"Macro indicators: {macro_n} · regime: {snapshot['macro'].get('regime', {}).get('verdict', '—')}")
+    _dual = snapshot["macro"].get("dual_regime") or {}
+    _us = (_dual.get("us") or {}).get("regime", "—")
+    _kr = (_dual.get("kr") or {}).get("regime", "—")
+    print(f"Macro indicators: {macro_n} · US 국면: {_us} · KR 국면: {_kr}")
     print(f"Saved snapshot: {path}")
     for ticker, s in sorted(stocks.items()):
         if s["data_quality"]["errors"]:

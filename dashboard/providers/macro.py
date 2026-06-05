@@ -1,14 +1,10 @@
-"""Macro provider: market indicators + a derived regime read via yfinance.
+"""Macro provider: market indicators and dual-regime inputs via yfinance.
 
-Replaces the hardcoded ``market_indicators`` / ``regime`` blocks. Produces
-payloads shaped exactly like the dashboard models so ``live.py`` can drop them
-straight into the input. yfinance is lazily imported; ``_load_quotes`` is
-patched in tests.
+yfinance is lazily imported; ``_load_quotes`` is patched in tests.
 """
 
 from __future__ import annotations
 
-from dashboard.macro_state import build_macro_state
 from dashboard.providers.base import day_change_pct, trailing_return_pct
 from dashboard.providers.kr_macro import build_kr_indicators, fetch_kr_quotes
 
@@ -33,10 +29,10 @@ REGIME_SYMBOLS = ["^VIX", "^TNX", "DX-Y.NYB", "CL=F", "BZ=F", "SPY", "RSP", "S5F
 
 
 def fetch_macro() -> dict:
-    """Return ``{"market_indicators": [...], "regime": {...}, "errors": [...]}``.
+    """Return macro indicator cards plus US/KR dual-regime indicator inputs.
 
-    Any symbol that fails to load is skipped from the strip; the regime falls
-    back to a neutral "conditional" read when key inputs are missing.
+    Any symbol that fails to load is skipped from the strip; downstream
+    dual-regime rendering degrades missing axes independently.
     """
     errors: list[str] = []
     symbols = sorted({s for s, _, _ in INDICATOR_SYMBOLS} | set(REGIME_SYMBOLS))
@@ -45,7 +41,6 @@ def fetch_macro() -> dict:
     except Exception as exc:  # pragma: no cover - network/optional dep
         return {
             "market_indicators": [],
-            "regime": {},
             "_us_indicators": [],
             "_kr_indicators": [],
             "errors": [f"macro: {type(exc).__name__}"],
@@ -71,13 +66,6 @@ def fetch_macro() -> dict:
             }
         )
 
-    regime = _derive_regime(quotes)
-    macro_state = build_macro_state(
-        {
-            "market_indicators": indicators,
-            "issues": _default_issue_cards(),
-        }
-    )
     kr_indicators: list[dict] = []
     try:
         kr_indicators = build_kr_indicators(quotes=fetch_kr_quotes())
@@ -86,8 +74,6 @@ def fetch_macro() -> dict:
 
     return {
         "market_indicators": indicators,
-        "regime": regime,
-        "macro_state": macro_state,
         "_us_indicators": indicators,
         "_kr_indicators": kr_indicators,
         "errors": errors,
@@ -104,83 +90,6 @@ def _indicator_read(symbol: str, group: str, chg: float | None) -> str:
     if chg <= -0.5:
         return f"{group} 약세. 방어적 접근."
     return f"{group} 보합. 추세 전환 신호 대기."
-
-
-def _default_issue_cards() -> list[dict]:
-    return [
-        {
-            "theme": "지정학",
-            "title": "중동 휴전 기대와 현장 충돌의 괴리",
-            "state": "unresolved",
-            "summary": "협상 기대는 남아 있으나 유가·금리·변동성이 종전 신뢰도를 확인해야 하는 상태.",
-            "triggers": ["Brent 95달러 위 고착", "미 10년물 4.5% 재상승", "VIX 동반 상승"],
-            "source_gaps": ["실시간 뉴스 자동 요약 미연결"],
-        }
-    ]
-
-
-def _derive_regime(quotes: dict) -> dict:
-    vix = _price(quotes, "^VIX")
-    tnx = _price(quotes, "^TNX")
-    tnx_chg = _chg(quotes, "^TNX")
-    dxy_chg = _chg(quotes, "DX-Y.NYB")
-    spy_ret = _ret(quotes, "SPY")
-
-    volatility = "low" if vix is not None and vix < 16 else (
-        "elevated" if vix is not None and vix < 22 else (
-            "high" if vix is not None else "unknown"
-        )
-    )
-    risk_appetite = "risk-on" if (spy_ret or 0) > 0 else (
-        "risk-off" if (spy_ret or 0) < -3 else "neutral"
-    )
-    rates = "rising" if (tnx_chg or 0) > 1.5 else (
-        "falling" if (tnx_chg or 0) < -1.5 else "stable"
-    )
-    dollar = "strong" if (dxy_chg or 0) > 0.3 else (
-        "weak" if (dxy_chg or 0) < -0.3 else "stable"
-    )
-
-    if volatility == "high" or (spy_ret is not None and spy_ret < -5):
-        verdict = "risk-off"
-    elif volatility == "low" and risk_appetite == "risk-on":
-        verdict = "risk-on"
-    else:
-        verdict = "conditional"
-
-    notes: list[str] = []
-    if vix is not None:
-        notes.append(f"VIX {vix:.1f} ({volatility}).")
-    if tnx is not None:
-        notes.append(f"미 10년물 {tnx:.2f}% ({rates}).")
-    if spy_ret is not None:
-        notes.append(f"S&P 직전 ~1개월 {spy_ret:+.1f}%.")
-    if not notes:
-        notes.append("매크로 실데이터 미연결 — 중립 가정.")
-
-    return {
-        "verdict": verdict,
-        "risk_appetite": risk_appetite,
-        "rates": rates,
-        "dollar": dollar,
-        "volatility": volatility,
-        "notes": notes,
-    }
-
-
-def _price(quotes: dict, sym: str) -> float | None:
-    q = quotes.get(sym)
-    return q.get("price") if q else None
-
-
-def _chg(quotes: dict, sym: str) -> float | None:
-    q = quotes.get(sym)
-    return q.get("day_change_pct") if q else None
-
-
-def _ret(quotes: dict, sym: str) -> float | None:
-    q = quotes.get(sym)
-    return q.get("return_pct") if q else None
 
 
 def _load_quotes(symbols: list[str]) -> dict[str, dict]:

@@ -33,7 +33,6 @@ def build_dashboard(source: DashboardInput) -> Dashboard:
         regime=source.regime,
         price_time=source.price_time,
         market_indicators=source.market_indicators,
-        macro_state=source.macro_state,
         lenses=source.lenses,
         candidates=candidates,
         dual_regime=source.dual_regime,
