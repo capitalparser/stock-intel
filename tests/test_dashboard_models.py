@@ -111,6 +111,31 @@ def test_parse_dashboard_input_accepts_same_level_lenses():
     assert CandidateStatus.WATCH.value == "Watch"
 
 
+def test_lens_kind_policy_parses():
+    payload = {
+        "as_of": "2026-06-06",
+        "price_time": "2026-06-06T00:00:00+09:00",
+        "market_indicators": [],
+        "lenses": [
+            {
+                "id": "value_up_low_pbr",
+                "kind": "policy",
+                "name": "저PBR 밸류업",
+                "conviction": "medium",
+                "direction": "long",
+                "weights": {"valuation": 0.6, "quality": 0.2, "growth": 0.0, "revision": 0.1, "momentum": 0.1},
+                "risks": ["밸류업 정책 동력 약화"],
+            }
+        ],
+        "stocks": [],
+    }
+
+    parsed = parse_dashboard_input(payload)
+
+    assert LensKind("policy") == LensKind.POLICY
+    assert parsed.lenses[0].kind == LensKind.POLICY
+
+
 def test_parse_stock_carries_independence():
     payload = {
         "as_of": "2026-06-05",

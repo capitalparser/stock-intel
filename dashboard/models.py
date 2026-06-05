@@ -12,6 +12,7 @@ class LensKind(str, Enum):
     SECTOR = "sector"
     MACRO = "macro"
     FACTOR = "factor"
+    POLICY = "policy"
 
 
 class CandidateStatus(str, Enum):
