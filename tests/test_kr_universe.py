@@ -49,6 +49,10 @@ def test_kr_screen_stocks_covers_seeds_and_normalizes():
     assert all(t.isdigit() and len(t) == 6 for t in tickers)
 
 
+def test_kr_screen_stocks_candidate_count_at_least_35():
+    assert len(kr_screen_stocks()) >= 35
+
+
 def test_sector_lens_map_covers_all_seed_sectors():
     from signals.kr_watch_candidates import KR_CANDIDATE_SEEDS
 

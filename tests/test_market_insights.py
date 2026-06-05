@@ -98,3 +98,30 @@ def test_kr_snapshot_overlay_replaces_neutral_seed_metrics():
         "momentum": 50,
     }
     assert any("실데이터 연결" in evidence for evidence in overlaid["evidence"])
+
+
+def test_kr_snapshot_gracefully_degrades_when_provider_returns_errors():
+    from dashboard.live import universe_from_payload
+    from dashboard.providers.base import RawStock
+    from dashboard.snapshot import build_snapshot
+
+    payload = build_market_insights_payload(insights_dir="/path/that/does/not/exist")
+    kr_universe = [entry for entry in universe_from_payload(payload) if entry.ticker == "000660"]
+    assert kr_universe
+
+    snapshot = build_snapshot(
+        kr_universe,
+        fetch=lambda ticker: RawStock(ticker, "KR", errors=["yfinance: Timeout"]),
+        macro=lambda: {"market_indicators": [], "errors": []},
+        as_of="2026-06-05",
+    )
+
+    stock = snapshot["stocks"]["000660"]
+    assert stock["metrics"] == {
+        "valuation": 50.0,
+        "quality": 50.0,
+        "growth": 50.0,
+        "revision": 50.0,
+        "momentum": 50.0,
+    }
+    assert stock["data_quality"]["errors"] == ["yfinance: Timeout"]
