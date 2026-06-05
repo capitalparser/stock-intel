@@ -25,7 +25,7 @@ US_SYMBOL_DIM = {
     "GLD": "commodities", "CPER": "commodities", "BZ=F": "oil", "CL=F": "oil",
 }
 KR_SPECS = {
-    "breadth": DimensionSpec("breadth", "코스피 시장 폭", RISK_LOW),
+    "breadth": DimensionSpec("breadth", "코스닥/코스피 상대강도", RISK_LOW),
     "sentiment": DimensionSpec("sentiment", "한국 변동성", RISK_HIGH),
     "fx": DimensionSpec("fx", "원화", RISK_HIGH, warn_guardrail=1450.0),
     "flow": DimensionSpec("flow", "외국인 수급", RISK_LOW),

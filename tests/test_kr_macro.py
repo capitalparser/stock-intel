@@ -118,3 +118,19 @@ def test_fetch_kr_quotes_skips_symbol_failures(monkeypatch):
 
     assert "KOSPI" in out
     assert "KOSDAQ" not in out
+
+
+def test_kr_breadth_axis_state_supportive_when_kosdaq_outperforms():
+    # B-03 부호 검증을 raw value(>50)가 아니라 엔진 axis state까지 확인 (Opus review should-fix).
+    # breadth state는 rs의 *자기 percentile*(ADR percentile 설계)이므로 단순 rs>50이 아니라
+    # 최근 rs가 자기 범위 상단(코스닥 우위 *확대*)이어야 supportive(RISK_LOW high).
+    from dashboard.macro_state import build_market_regime
+    kospi = [100 + i * 0.1 for i in range(60)]          # 완만 선형
+    kosdaq = [100 + 0.01 * i * i for i in range(60)]    # 가속 → rs 최근 상단
+    inds = build_kr_indicators(quotes={
+        "KOSPI": {"closes": kospi, "day_change_pct": 0.2, "value": kospi[-1]},
+        "KOSDAQ": {"closes": kosdaq, "day_change_pct": 0.4, "value": kosdaq[-1]},
+    })
+    out = build_market_regime(inds, market="KR")
+    breadth = next(a for a in out["axis_reads"] if a["dimension"] == "breadth")
+    assert breadth["state"] == "supportive"  # 코스닥 우위 확대 → rs 고percentile → supportive
