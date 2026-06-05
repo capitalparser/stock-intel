@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dashboard.macro_state import build_macro_state
 from dashboard.providers.base import day_change_pct, trailing_return_pct
+from dashboard.providers.kr_macro import build_kr_indicators, fetch_kr_quotes
 
 # (symbol, display name, group) for the indicator strip.
 INDICATOR_SYMBOLS: list[tuple[str, str, str]] = [
@@ -42,7 +43,13 @@ def fetch_macro() -> dict:
     try:
         quotes = _load_quotes(symbols)
     except Exception as exc:  # pragma: no cover - network/optional dep
-        return {"market_indicators": [], "regime": {}, "errors": [f"macro: {type(exc).__name__}"]}
+        return {
+            "market_indicators": [],
+            "regime": {},
+            "_us_indicators": [],
+            "_kr_indicators": [],
+            "errors": [f"macro: {type(exc).__name__}"],
+        }
 
     indicators = []
     for symbol, name, group in INDICATOR_SYMBOLS:
@@ -71,10 +78,18 @@ def fetch_macro() -> dict:
             "issues": _default_issue_cards(),
         }
     )
+    kr_indicators: list[dict] = []
+    try:
+        kr_indicators = build_kr_indicators(quotes=fetch_kr_quotes())
+    except Exception as exc:  # pragma: no cover - network/optional dep
+        errors.append(f"kr_macro: {type(exc).__name__}")
+
     return {
         "market_indicators": indicators,
         "regime": regime,
         "macro_state": macro_state,
+        "_us_indicators": indicators,
+        "_kr_indicators": kr_indicators,
         "errors": errors,
     }
 

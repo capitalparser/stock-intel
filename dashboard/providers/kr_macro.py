@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from dashboard.providers.base import day_change_pct
+
 
 def realized_vol(closes: list[float], window: int = 20) -> float:
     use = [float(c) for c in closes[-(window + 1):] if c is not None]
@@ -112,6 +114,33 @@ def build_kr_indicators(*, quotes: dict[str, Any]) -> list[dict]:
 
 
 def fetch_kr_quotes() -> dict[str, Any]:
-    """Live quote wiring is deferred until the KRX_API_KEY task."""
+    """Fetch KR macro proxy quotes via yfinance only.
 
-    raise NotImplementedError("Task 5에서 KRX+yfinance 라이브 배선")
+    KOSPI/KOSDAQ are liquid ETF proxies. KRX/yfinance index tickers such as
+    ^KS11 and ^KS200 are intentionally not used because they can return NaN.
+    """
+
+    import yfinance as yf  # lazy
+
+    symbols = {
+        "KOSPI": "069500.KS",
+        "KOSDAQ": "229200.KS",
+        "USDKRW=X": "USDKRW=X",
+        "EWY": "EWY",
+    }
+    out: dict[str, Any] = {}
+    for key, yf_symbol in symbols.items():
+        try:
+            data = yf.download(yf_symbol, period="1y", interval="1d", progress=False)
+            closes = [float(v) for v in data["Close"].dropna().tolist()]
+        except Exception:
+            continue
+        closes = [c for c in closes if math.isfinite(c)]
+        if not closes:
+            continue
+        out[key] = {
+            "closes": closes,
+            "day_change_pct": day_change_pct(closes),
+            "value": closes[-1],
+        }
+    return out

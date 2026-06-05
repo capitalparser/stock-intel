@@ -1,4 +1,8 @@
+import sys
+from types import SimpleNamespace
+
 from dashboard.providers.kr_macro import build_kr_indicators, realized_vol, relative_strength
+from dashboard.providers.kr_macro import fetch_kr_quotes
 
 
 def test_realized_vol_positive():
@@ -50,3 +54,67 @@ def test_foreign_net_is_explicit_ewy_proxy():
     foreign = next(i for i in inds if i["symbol"] == "FOREIGN_NET")
     assert foreign["source_kind"] == "proxy"
     assert foreign["read"] == "EWY 프록시 — 실제 외국인 순매수 아님"
+
+
+def test_fetch_kr_quotes_uses_yfinance_etf_proxies_only(monkeypatch):
+    calls = []
+
+    class FakeClose:
+        def __init__(self, values):
+            self._values = values
+
+        def dropna(self):
+            return self
+
+        def tolist(self):
+            return self._values
+
+    class FakeFrame:
+        def __init__(self, values):
+            self._values = values
+
+        def __getitem__(self, key):
+            assert key == "Close"
+            return FakeClose(self._values)
+
+    def fake_download(symbol, *, period, interval, progress):
+        calls.append((symbol, period, interval, progress))
+        return FakeFrame([100.0, 101.0, 103.0])
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=fake_download))
+
+    out = fetch_kr_quotes()
+
+    assert [c[0] for c in calls] == ["069500.KS", "229200.KS", "USDKRW=X", "EWY"]
+    assert all(c[1] == "1y" for c in calls)
+    assert "^KS11" not in [c[0] for c in calls]
+    assert "^KS200" not in [c[0] for c in calls]
+    assert set(out) == {"KOSPI", "KOSDAQ", "USDKRW=X", "EWY"}
+    assert out["KOSPI"]["closes"] == [100.0, 101.0, 103.0]
+    assert out["KOSPI"]["value"] == 103.0
+    assert out["KOSPI"]["day_change_pct"] > 0
+
+
+def test_fetch_kr_quotes_skips_symbol_failures(monkeypatch):
+    class FakeClose:
+        def dropna(self):
+            return self
+
+        def tolist(self):
+            return [100.0, 101.0]
+
+    class FakeFrame:
+        def __getitem__(self, key):
+            return FakeClose()
+
+    def fake_download(symbol, *, period, interval, progress):
+        if symbol == "229200.KS":
+            raise RuntimeError("missing")
+        return FakeFrame()
+
+    monkeypatch.setitem(sys.modules, "yfinance", SimpleNamespace(download=fake_download))
+
+    out = fetch_kr_quotes()
+
+    assert "KOSPI" in out
+    assert "KOSDAQ" not in out

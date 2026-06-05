@@ -27,7 +27,7 @@ def main() -> None:
     universe = universe_from_payload(payload)
     print(f"Universe: {len(universe)} tickers")
 
-    snapshot = build_snapshot(universe)
+    snapshot = build_snapshot(universe, persist_regime_history=True)
     path = save_snapshot(snapshot, args.cache_dir)
 
     stocks = snapshot["stocks"]

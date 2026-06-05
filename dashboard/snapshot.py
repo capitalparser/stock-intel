@@ -18,8 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable
 
+from dashboard.macro_state import build_dual_regime as _build_dual_regime
 from dashboard.metrics import METRIC_FIELDS, build_metrics
 from dashboard.providers import RawStock, fetch_macro, fetch_raw_stock
+from dashboard.regime_history import DEFAULT_HISTORY_PATH, append_today, load_history
 
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[1] / "state" / "dashboard" / "cache"
 LATEST_NAME = "snapshot-latest.json"
@@ -37,6 +39,7 @@ def build_snapshot(
     fetch: Callable[[str], RawStock] = fetch_raw_stock,
     macro: Callable[[], dict] = fetch_macro,
     as_of: str | None = None,
+    persist_regime_history: bool = False,
 ) -> dict:
     entries = list(universe)
     raws: dict[str, RawStock] = {}
@@ -87,8 +90,14 @@ def build_snapshot(
             },
         }
 
-    macro_payload = macro()
     resolved_as_of = as_of or _infer_as_of(raws) or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    macro_payload = macro()
+    _embed_dual_regime(
+        macro_payload,
+        as_of=resolved_as_of,
+        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        persist_regime_history=persist_regime_history,
+    )
     return {
         "as_of": resolved_as_of,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -115,6 +124,44 @@ def _peer_pe_by_group(
 def _infer_as_of(raws: dict[str, RawStock]) -> str | None:
     dates = sorted(r.as_of for r in raws.values() if r.as_of)
     return dates[-1] if dates else None
+
+
+def build_dual_regime(us_indicators: list[dict], kr_indicators: list[dict], *, as_of: str) -> dict:
+    return _build_dual_regime(
+        us_indicators,
+        kr_indicators,
+        history=load_history(_history_path()),
+        as_of=as_of,
+    )
+
+
+def _embed_dual_regime(
+    macro_payload: dict,
+    *,
+    as_of: str,
+    generated_at: str,
+    persist_regime_history: bool,
+) -> None:
+    us_indicators = macro_payload.get("_us_indicators") or macro_payload.get("market_indicators") or []
+    kr_indicators = macro_payload.get("_kr_indicators") or []
+    if not us_indicators and not kr_indicators:
+        return
+    dual = build_dual_regime(us_indicators, kr_indicators, as_of=as_of)
+    macro_payload["dual_regime"] = dual
+    if persist_regime_history:
+        append_today(
+            {
+                "as_of": as_of,
+                "us": dual["us"],
+                "kr": dual["kr"],
+                "generated_at": generated_at,
+            },
+            _history_path(),
+        )
+
+
+def _history_path() -> Path:
+    return DEFAULT_HISTORY_PATH
 
 
 # --------------------------------------------------------------------------- #
