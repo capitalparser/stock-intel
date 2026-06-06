@@ -114,11 +114,19 @@ function summaryPanel(snapshot: DashboardSnapshot) {
 }
 
 function progressPanel(snapshot: DashboardSnapshot) {
+  // React CandidateTable의 isBlocked와 동일 기준(status 또는 independence_status에 BLOCK) — 라벨·정렬 일치.
+  const isBlocked = (c: DashboardSnapshot["candidates"][number]) =>
+    c.status.toUpperCase().includes("BLOCK") || (c.independence_status ?? "").toUpperCase().includes("BLOCK");
   const rows = snapshot.candidates
     .slice()
-    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .sort((a, b) => {
+      const ab = isBlocked(a) ? 1 : 0;
+      const bb = isBlocked(b) ? 1 : 0;
+      if (ab !== bb) return ab - bb; // 차단 종목은 맨 뒤로 강등
+      return (b.score ?? -1) - (a.score ?? -1);
+    })
     .slice(0, 50)
-    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${candidate.status.toUpperCase().includes("BLOCK") ? "BLOCKED" : "BLOCKED 확인"}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="5">${escapeHtml(candidate.thesis)}</td></tr>`)
+    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${isBlocked(candidate) ? "차단" : "정상"}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="5">${escapeHtml(candidate.thesis)}</td></tr>`)
     .join("");
   return `<table><thead><tr><th>종목</th><th>매력도</th><th>PER</th><th>렌즈</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table>`;
 }

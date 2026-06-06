@@ -65,7 +65,7 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
         header: "상태",
         accessorFn: (row) => (isBlocked(row) ? 1 : 0),  // 0=비차단 먼저, 1=차단 맨뒤
         cell: ({ row }) =>
-          isBlocked(row.original) ? <Badge tone="risk">BLOCKED</Badge> : <span className="text-xs text-textMuted">BLOCKED 확인</span>,
+          isBlocked(row.original) ? <Badge tone="risk">차단</Badge> : <span className="text-xs text-textMuted">정상</span>,
       },
       {
         id: "sparkline",

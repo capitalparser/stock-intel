@@ -11,7 +11,7 @@ describe("progress tab", () => {
     expect(screen.getByRole("columnheader", { name: "매력도" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "PER" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "렌즈" })).toBeInTheDocument();
-    expect(screen.getByText("BLOCKED 확인")).toBeInTheDocument();
+    expect(screen.getByText("정상")).toBeInTheDocument();
     expect(screen.queryByLabelText("ADI 가격 흐름")).not.toBeInTheDocument();
   });
 });

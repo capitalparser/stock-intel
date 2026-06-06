@@ -29,7 +29,16 @@ export const transitionSchema = z.object({
   from_regime: z.string().optional(),
   streak: z.number().int().nullable().optional(),
   whipsaw: z.boolean().default(false),
-  axis_changes: z.array(z.string()).default([]),
+  // canonical: Python detect_transition이 축별 {dimension, from, to} 객체로 생성.
+  // 레거시 문자열 배열도 허용(구 스냅샷/픽스처 호환).
+  axis_changes: z
+    .array(
+      z.union([
+        z.string(),
+        z.object({ dimension: z.string(), from: z.string(), to: z.string() }),
+      ]),
+    )
+    .default([]),
 });
 
 export const dualRegimeSchema = z.object({
