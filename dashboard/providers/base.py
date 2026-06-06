@@ -46,6 +46,12 @@ class RawStock:
     # recent close series (sparkline) — most-recent last, best-effort
     closes: list[float] = field(default_factory=list)
 
+    # 외국인/기관 순매수 누적(원) — KR only, Naver 수급. 표면화 + graded net_flow.
+    foreign_net_5d: float | None = None
+    foreign_net_20d: float | None = None
+    inst_net_5d: float | None = None
+    inst_net_20d: float | None = None
+
     as_of: str | None = None
     errors: list[str] = field(default_factory=list)
 

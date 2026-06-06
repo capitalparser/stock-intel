@@ -17,6 +17,14 @@ function valueLabel(value?: number | null) {
   return value == null ? "확인 필요" : value.toFixed(1);
 }
 
+function krwLabel(value?: number | null) {
+  if (value == null) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(1)}조`;
+  if (abs >= 1e8) return `${Math.round(value / 1e8).toLocaleString()}억`;
+  return `${Math.round(value).toLocaleString()}원`;
+}
+
 export function Inspector({ candidate, snapshot }: InspectorProps) {
   const valuation = snapshot.valuation_expectations.find((item) => item.ticker === candidate.ticker);
 
@@ -55,6 +63,18 @@ export function Inspector({ candidate, snapshot }: InspectorProps) {
         <div>
           <h3 className="text-sm font-semibold">밸류에이션 기대치</h3>
           <p className="mt-xs text-sm text-textMuted">{valuation?.read || candidate.expectation_verdict || `PER ${valueLabel(candidate.pe)}`}</p>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold">수급 (외국인·기관 순매수)</h3>
+          {candidate.supply ? (
+            <p className="mt-xs text-sm text-textMuted">
+              외국인 5일 {krwLabel(candidate.supply.foreign_5d)} · 20일 {krwLabel(candidate.supply.foreign_20d)}
+              <br />
+              기관 5일 {krwLabel(candidate.supply.inst_5d)} · 20일 {krwLabel(candidate.supply.inst_20d)}
+            </p>
+          ) : (
+            <p className="mt-xs text-sm text-textMuted">수급 데이터 없음 (해외 종목 등)</p>
+          )}
         </div>
         <div>
           <h3 className="text-sm font-semibold">gaps</h3>

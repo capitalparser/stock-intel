@@ -1,4 +1,10 @@
-"""Render lens dashboard outputs."""
+"""Render lens dashboard outputs.
+
+DEPRECATED (legacy): 구 다크 테마 HTML 렌더러. design-kit Lane B React cockpit
+(``web/``)과 Snapshot Export(``web/src/export/snapshotExport.ts``, light workbench)로
+대체됨. 신규 산출물은 React cockpit / Snapshot Export를 사용하고, 이 모듈은 회귀 테스트
+호환을 위해서만 유지한다. 신규 기능 추가 금지.
+"""
 
 from __future__ import annotations
 

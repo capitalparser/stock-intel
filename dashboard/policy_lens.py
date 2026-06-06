@@ -42,6 +42,48 @@ VALUE_UP_LENS = PolicyLens(
     ],
 )
 
+CHIPS_LENS = PolicyLens(
+    id="policy_chips_act",
+    name="美 반도체 (CHIPS)",
+    kind=LensKind.POLICY,
+    description="美 CHIPS법 보조금·자국 생산 인센티브의 반도체 capex 수혜를 추적하는 정책 렌즈.",
+    conviction="medium",
+    direction="long",
+    weights={"valuation": 0.1, "quality": 0.3, "growth": 0.4, "revision": 0.1, "momentum": 0.1},
+    risks=[
+        "보조금 집행 지연·정권 교체 시 capex 모멘텀 둔화",
+        "반도체 다운사이클이 정책 수혜를 상쇄",
+    ],
+)
+
+IRA_LENS = PolicyLens(
+    id="policy_ira_clean_energy",
+    name="美 IRA 청정에너지·배터리",
+    kind=LensKind.POLICY,
+    description="美 IRA 세액공제·현지 생산 요건의 배터리·청정에너지 수혜를 추적하는 정책 렌즈.",
+    conviction="medium",
+    direction="long",
+    weights={"valuation": 0.1, "quality": 0.2, "growth": 0.4, "revision": 0.1, "momentum": 0.2},
+    risks=[
+        "IRA 축소·해외우려기관(FEOC) 규정 강화 시 한국 배터리 수혜 약화",
+        "전기차 수요 둔화가 가동률·마진 압박",
+    ],
+)
+
+KDEF_LENS = PolicyLens(
+    id="policy_k_defense",
+    name="K-방산 수출",
+    kind=LensKind.POLICY,
+    description="지정학 긴장·유럽 재무장 사이클의 한국 방산 수출 수주 모멘텀을 추적하는 정책 렌즈.",
+    conviction="medium",
+    direction="long",
+    weights={"valuation": 0.1, "quality": 0.2, "growth": 0.3, "revision": 0.2, "momentum": 0.2},
+    risks=[
+        "휴전·지정학 완화 시 수주 모멘텀 둔화",
+        "납기 지연·환율 변동이 수익 인식에 영향",
+    ],
+)
+
 LOW_PBR_SEEDS = [
     "004020",
     "011170",
@@ -78,11 +120,73 @@ _NEUTRAL_METRICS = {
 
 
 def policy_lenses() -> list[PolicyLens]:
-    return [VALUE_UP_LENS]
+    return [VALUE_UP_LENS, CHIPS_LENS, IRA_LENS, KDEF_LENS]
+
+
+# 시드 종목: code -> (company, sector_label, feature). lens별 큐레이션 수혜주.
+_POLICY_SEED_GROUPS: list[tuple[PolicyLens, dict[str, tuple[str, str, str]]]] = [
+    (
+        CHIPS_LENS,
+        {
+            "INTC": ("인텔", "美 반도체 (CHIPS)", "美 파운드리 보조금 최대 수혜·자국 생산"),
+            "MU": ("마이크론", "美 반도체 (CHIPS)", "메모리 美 증설·보조금 대상"),
+            "TSM": ("TSMC", "美 반도체 (CHIPS)", "애리조나 팹 보조금·선단공정"),
+            "GFS": ("글로벌파운드리", "美 반도체 (CHIPS)", "성숙공정 자국 생산 수혜"),
+            "TXN": ("텍사스인스트루먼트", "美 반도체 (CHIPS)", "아날로그 美 증설·보조금"),
+        },
+    ),
+    (
+        IRA_LENS,
+        {
+            "373220": ("LG에너지솔루션", "美 IRA 청정에너지·배터리", "美 현지생산 세액공제(AMPC) 최대 수혜"),
+            "006400": ("삼성SDI", "美 IRA 청정에너지·배터리", "美 합작 증설·AMPC 수혜"),
+            "005490": ("POSCO홀딩스", "美 IRA 청정에너지·배터리", "양극재·리튬 밸류체인 현지화"),
+            "FSLR": ("퍼스트솔라", "美 IRA 청정에너지·배터리", "美 태양광 모듈 생산 세액공제"),
+            "ENPH": ("엔페이즈", "美 IRA 청정에너지·배터리", "주거용 태양광 인버터 IRA 수요"),
+        },
+    ),
+    (
+        KDEF_LENS,
+        {
+            "012450": ("한화에어로스페이스", "K-방산 수출", "유럽·중동 수출 + 우주/엔진"),
+            "079550": ("LIG디펜스앤에어로스페이스", "K-방산 수출", "유도무기 수출 수주 모멘텀"),
+            "064350": ("현대로템", "K-방산 수출", "K2 전차 폴란드 등 수출"),
+            "047810": ("한국항공우주", "K-방산 수출", "FA-50 경공격기 수출"),
+            "042660": ("한화오션", "K-방산 수출", "함정 수출 + 방산 조선"),
+        },
+    ),
+]
 
 
 def low_pbr_seed_stocks() -> list[dict]:
     return [_seed_to_stock(code) for code in LOW_PBR_SEEDS]
+
+
+def policy_seed_stocks() -> list[dict]:
+    """모든 정책 렌즈의 시드 종목(저PBR + CHIPS/IRA/K-방산)."""
+    stocks = low_pbr_seed_stocks()
+    for lens, seeds in _POLICY_SEED_GROUPS:
+        for code, (name, sector, feature) in seeds.items():
+            stocks.append(_policy_seed_to_stock(code, lens, name, sector, feature))
+    return stocks
+
+
+def _policy_seed_to_stock(code: str, lens: PolicyLens, name: str, sector: str, feature: str) -> dict:
+    return {
+        "ticker": code,
+        "company": name,
+        "sector": sector,
+        "lens_ids": [lens.id],
+        "thesis": f"{name}: {lens.name} 정책 수혜 후보 - {feature}.",
+        "metrics": dict(_NEUTRAL_METRICS),
+        "evidence": [f"{lens.name} 정책 시드", feature],
+        "bull_case": [f"{lens.name} 정책 동력 강화 시 {name} 수혜 - {feature}"],
+        "bear_case": [f"{lens.name} 정책 후퇴·집행/수주 지연 시 모멘텀 약화."],
+        "gaps": [f"{lens.name} 시드 - 실데이터(가격·수주/실적·가이던스) 스냅샷 overlay 필요"],
+        "next_action": f"{name} 관련 정책 집행·수주/가이던스 업데이트 확인.",
+        "source_refs": [f"{lens.name} 정책 렌즈"],
+        "peer_group": sector,
+    }
 
 
 def _seed_to_stock(code: str) -> dict:

@@ -117,17 +117,44 @@ def _apply_technical(raw: RawStock, data: dict | None) -> None:
 def _apply_supply(raw: RawStock, data: dict | None) -> None:
     if not data:
         return
-    inst = (data.get("institution") or {}).get("today")
-    frgn = (data.get("foreigner") or {}).get("today")
-    total = sum(v for v in (inst, frgn) if isinstance(v, (int, float)))
-    if inst is None and frgn is None:
+    inst = data.get("institution") or {}
+    frgn = data.get("foreigner") or {}
+    raw.inst_net_5d = _opt_float(inst.get("5d"))
+    raw.inst_net_20d = _opt_float(inst.get("20d"))
+    raw.foreign_net_5d = _opt_float(frgn.get("5d"))
+    raw.foreign_net_20d = _opt_float(frgn.get("20d"))
+
+    # graded net_flow: 5일/20일 외국인+기관 합산 부호의 평균 → {-1,-0.5,0,0.5,1}.
+    # 단일일(today) 부호보다 노이즈가 적음.
+    def _sign(value: float | None) -> float | None:
+        if value is None:
+            return None
+        return 1.0 if value > 0 else (-1.0 if value < 0 else 0.0)
+
+    def _combined(a: float | None, b: float | None) -> float | None:
+        if a is None and b is None:
+            return None
+        return (a or 0.0) + (b or 0.0)
+
+    signs = [
+        s
+        for s in (
+            _sign(_combined(raw.foreign_net_5d, raw.inst_net_5d)),
+            _sign(_combined(raw.foreign_net_20d, raw.inst_net_20d)),
+        )
+        if s is not None
+    ]
+    if signs:
+        raw.net_flow_signal = sum(signs) / len(signs)
         return
-    if total > 0:
-        raw.net_flow_signal = 1.0
-    elif total < 0:
-        raw.net_flow_signal = -1.0
-    else:
-        raw.net_flow_signal = 0.0
+
+    # fallback: today 부호(기존 동작 — 5d/20d 부재 시)
+    inst_today = inst.get("today")
+    frgn_today = frgn.get("today")
+    if inst_today is None and frgn_today is None:
+        return
+    total = sum(v for v in (inst_today, frgn_today) if isinstance(v, (int, float)))
+    raw.net_flow_signal = 1.0 if total > 0 else (-1.0 if total < 0 else 0.0)
 
 
 def _apply_short(raw: RawStock, data: dict | None) -> None:

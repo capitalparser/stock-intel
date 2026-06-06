@@ -94,6 +94,12 @@ def build_snapshot(
             "short_ratio": _round(raw.short_ratio, 2),
             "net_flow_signal": _round(raw.net_flow_signal, 2),
             "closes": [round(float(c), 2) for c in (raw.closes or [])],
+            "supply": {
+                "foreign_5d": raw.foreign_net_5d,
+                "foreign_20d": raw.foreign_net_20d,
+                "inst_5d": raw.inst_net_5d,
+                "inst_20d": raw.inst_net_20d,
+            },
             "independence_status": str(independence_read.get("status") or ""),
             "auditor": independence_read.get("auditor") or "",
             "independence_reason": str(independence_read.get("reason") or ""),

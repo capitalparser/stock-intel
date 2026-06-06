@@ -3,15 +3,37 @@ from dashboard.policy_lens import (
     VALUE_UP_LENS,
     policy_lenses,
     low_pbr_seed_stocks,
+    policy_seed_stocks,
 )
 
 
-def test_policy_lenses_returns_value_up_lens():
+def test_policy_lenses_includes_value_up_and_new_policy_lenses():
     lenses = policy_lenses()
 
-    assert len(lenses) == 1
-    assert lenses[0] == VALUE_UP_LENS
-    assert lenses[0].id == "value_up_low_pbr"
+    assert lenses[0] == VALUE_UP_LENS  # value_up은 첫 슬롯 유지
+    ids = {lens.id for lens in lenses}
+    assert {
+        "value_up_low_pbr",
+        "policy_chips_act",
+        "policy_ira_clean_energy",
+        "policy_k_defense",
+    } <= ids
+    # 모든 정책 렌즈 weights는 1.0으로 정규화
+    for lens in lenses:
+        assert abs(sum(lens.weights.values()) - 1.0) < 1e-9
+
+
+def test_policy_seed_stocks_cover_new_lenses_and_link_correctly():
+    stocks = {str(s["ticker"]): s for s in policy_seed_stocks()}
+    # 저PBR + 신규 렌즈 시드가 모두 포함
+    assert "004020" in stocks  # 저PBR
+    for ticker, lens_id in (
+        ("INTC", "policy_chips_act"),
+        ("373220", "policy_ira_clean_energy"),
+        ("012450", "policy_k_defense"),
+    ):
+        assert ticker in stocks, ticker
+        assert lens_id in stocks[ticker]["lens_ids"]
 
 
 def test_low_pbr_seed_stocks_are_non_empty_and_cover_all_seed_codes():

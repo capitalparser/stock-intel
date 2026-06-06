@@ -266,9 +266,16 @@ Universe snapshot이 있으면 `/signals`는 TradingView 전체 watchlist 합집
 투자 가설·섹터·거시 환경·투자 성향을 같은 층위의 판단 관점으로 두고, 여러 관점이 동시에 가리키는 후보 종목을 점검합니다. 실데이터(yfinance·pykrx·네이버·DART)를 스냅샷으로 받아 self-contained HTML/Markdown으로 렌더합니다.
 
 ```bash
-# 실데이터 스냅샷 빌드(네트워크 필요) → 렌더
+# 실데이터 스냅샷 빌드(네트워크 필요)
 set -a; source .env; set +a
 uv run python scripts/build_dashboard_snapshot.py
+
+# 권장 산출: Lane B React cockpit / Snapshot Export (design-kit light workbench)
+uv run python scripts/export_dashboard_json.py   # 데이터 계약 JSON
+cd web && npm run dev                             # 실시간 대시보드
+# 또는: npm run export:snapshot                   # self-contained HTML 스냅샷
+
+# (legacy) 구 다크 테마 HTML/MD 렌더러 — 회귀 호환용, 신규 사용 비권장
 uv run python scripts/render_lens_dashboard.py
 # 출력: state/dashboard/reports/YYYY-MM-DD-lens-dashboard.{html,md}
 ```

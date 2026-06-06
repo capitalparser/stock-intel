@@ -1,5 +1,9 @@
 """Render the lens investment dashboard.
 
+DEPRECATED (legacy): 구 다크 테마 HTML/MD 렌더러 CLI. design-kit Lane B React cockpit
+(``cd web && npm run dev``)과 Snapshot Export(``npm run export:snapshot``)로 대체됨.
+회귀 테스트/하위호환용으로만 유지한다.
+
 Prefers the cached real-data snapshot (``dashboard.live``); transparently
 falls back to the curated sample input when no snapshot exists. Use
 ``--sample`` to force the curated input regardless of cache.

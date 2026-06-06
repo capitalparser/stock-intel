@@ -135,6 +135,17 @@ function progressPanel(snapshot: DashboardSnapshot) {
       .join(" ");
     return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" aria-label="가격 흐름"><polyline fill="none" stroke="#175cd3" stroke-width="2" points="${pts}"/></svg>`;
   };
+  const krw = (v?: number | null) => {
+    if (v == null) return "—";
+    const a = Math.abs(v);
+    if (a >= 1e12) return `${(v / 1e12).toFixed(1)}조`;
+    if (a >= 1e8) return `${Math.round(v / 1e8).toLocaleString()}억`;
+    return `${Math.round(v).toLocaleString()}원`;
+  };
+  const supplyLine = (c: DashboardSnapshot["candidates"][number]) =>
+    c.supply
+      ? ` · 수급(외국인 5일 ${krw(c.supply.foreign_5d)}/20일 ${krw(c.supply.foreign_20d)}, 기관 5일 ${krw(c.supply.inst_5d)}/20일 ${krw(c.supply.inst_20d)})`
+      : "";
   const rows = snapshot.candidates
     .slice()
     .sort((a, b) => {
@@ -144,7 +155,7 @@ function progressPanel(snapshot: DashboardSnapshot) {
       return (b.score ?? -1) - (a.score ?? -1);
     })
     .slice(0, 50)
-    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${isBlocked(candidate) ? "차단" : "정상"}</td><td>${spark(candidate.price_series)}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="6">${escapeHtml(candidate.thesis)}</td></tr>`)
+    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${isBlocked(candidate) ? "차단" : "정상"}</td><td>${spark(candidate.price_series)}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="6">${escapeHtml(candidate.thesis)}${escapeHtml(supplyLine(candidate))}</td></tr>`)
     .join("");
   return `<table><thead><tr><th>종목</th><th>매력도</th><th>PER</th><th>렌즈</th><th>상태</th><th>흐름</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -160,10 +171,22 @@ function attentionPanel(snapshot: DashboardSnapshot) {
     .join("")}</div><table id="attention-export"><tbody>${rows}</tbody></table>`;
 }
 
+function krwLabel(v?: number | null) {
+  if (v == null) return "—";
+  const a = Math.abs(v);
+  if (a >= 1e12) return `${(v / 1e12).toFixed(1)}조`;
+  if (a >= 1e8) return `${Math.round(v / 1e8).toLocaleString()}억`;
+  return `${Math.round(v).toLocaleString()}원`;
+}
+
 function evidencePanel(snapshot: DashboardSnapshot) {
-  const candidate = snapshot.candidates[0];
+  // 수급 실데이터(KR)가 있는 최상위 후보를 우선 featured — 없으면 top 후보.
+  const candidate = snapshot.candidates.find((c) => c.supply) ?? snapshot.candidates[0];
   if (!candidate) return "<p>표시할 후보가 없습니다.</p>";
-  return `<article class="card"><h2>${escapeHtml(candidate.ticker)} 근거</h2><p>${escapeHtml(candidate.thesis)}</p><p><strong>독립성</strong> ${escapeHtml(candidate.independence_status || "확인된 제한 없음")}</p><p><strong>catalyst</strong> ${escapeHtml(candidate.catalysts.map((item) => item.label).join(" · ") || "없음")}</p><p><strong>밸류에이션 기대치</strong> ${escapeHtml(candidate.expectation_verdict || candidate.pe || "-")}</p><p><strong>gaps</strong> ${escapeHtml(candidate.gaps.join(" · ") || "미해결 갭 없음")}</p><details><summary>기술 세부정보</summary><pre>${escapeHtml(JSON.stringify(candidate, null, 2))}</pre></details></article>`;
+  const supply = candidate.supply
+    ? `외국인 5일 ${krwLabel(candidate.supply.foreign_5d)}/20일 ${krwLabel(candidate.supply.foreign_20d)} · 기관 5일 ${krwLabel(candidate.supply.inst_5d)}/20일 ${krwLabel(candidate.supply.inst_20d)}`
+    : "데이터 없음 (해외 종목 등)";
+  return `<article class="card"><h2>${escapeHtml(candidate.ticker)} 근거</h2><p>${escapeHtml(candidate.thesis)}</p><p><strong>독립성</strong> ${escapeHtml(candidate.independence_status || "확인된 제한 없음")}</p><p><strong>catalyst</strong> ${escapeHtml(candidate.catalysts.map((item) => item.label).join(" · ") || "없음")}</p><p><strong>밸류에이션 기대치</strong> ${escapeHtml(candidate.expectation_verdict || candidate.pe || "-")}</p><p><strong>수급(외국인·기관 순매수)</strong> ${escapeHtml(supply)}</p><p><strong>gaps</strong> ${escapeHtml(candidate.gaps.join(" · ") || "미해결 갭 없음")}</p><details><summary>기술 세부정보</summary><pre>${escapeHtml(JSON.stringify(candidate, null, 2))}</pre></details></article>`;
 }
 
 function nextPanel(snapshot: DashboardSnapshot) {

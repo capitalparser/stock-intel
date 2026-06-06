@@ -126,6 +126,16 @@ export const candidateSchema = z.object({
     })
     .optional(),
   price_series: z.array(z.number()).optional().default([]),
+  // 외국인/기관 순매수 누적(원) — KR only, 없으면 null
+  supply: z
+    .object({
+      foreign_5d: z.number().nullable().optional(),
+      foreign_20d: z.number().nullable().optional(),
+      inst_5d: z.number().nullable().optional(),
+      inst_20d: z.number().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const valuationExpectationSchema = z.object({

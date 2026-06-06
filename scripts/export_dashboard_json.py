@@ -51,6 +51,7 @@ REQUIRED_CANDIDATE_KEYS = (
     "catalysts",
     "expectation_verdict",
     "price_series",
+    "supply",
 )
 
 
@@ -141,6 +142,7 @@ def _serialize_candidate(candidate, *, stock_payload: dict[str, Any], snapshot_s
         "catalysts": _to_jsonable(candidate.catalysts or []),
         "expectation_verdict": candidate.expectation_verdict,
         "price_series": _price_series(stock_payload, snapshot_stock),
+        "supply": _supply(snapshot_stock),
     }
     return {key: item[key] for key in REQUIRED_CANDIDATE_KEYS}
 
@@ -153,6 +155,14 @@ def _serialize_lens(lens) -> dict[str, Any]:
 
 def _serialize_linked_lens(lens) -> dict[str, str]:
     return {"id": str(lens.id), "name": str(lens.name)}
+
+
+def _supply(snapshot_stock: dict[str, Any]) -> dict[str, Any] | None:
+    """KR 수급 dict. 모든 값이 None(해외 종목 등)이면 None으로 정리."""
+    supply = snapshot_stock.get("supply")
+    if isinstance(supply, dict) and any(v is not None for v in supply.values()):
+        return supply
+    return None
 
 
 def _price_series(stock_payload: dict[str, Any], snapshot_stock: dict[str, Any]) -> list[float]:
