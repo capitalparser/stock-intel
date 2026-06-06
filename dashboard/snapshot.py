@@ -93,6 +93,7 @@ def build_snapshot(
             "peer_group": group,
             "short_ratio": _round(raw.short_ratio, 2),
             "net_flow_signal": _round(raw.net_flow_signal, 2),
+            "closes": [round(float(c), 2) for c in (raw.closes or [])],
             "independence_status": str(independence_read.get("status") or ""),
             "auditor": independence_read.get("auditor") or "",
             "independence_reason": str(independence_read.get("reason") or ""),

@@ -43,6 +43,9 @@ class RawStock:
     ma_trend: str | None = None
     volume_ratio: float | None = None
 
+    # recent close series (sparkline) — most-recent last, best-effort
+    closes: list[float] = field(default_factory=list)
+
     as_of: str | None = None
     errors: list[str] = field(default_factory=list)
 

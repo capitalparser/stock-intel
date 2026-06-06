@@ -55,6 +55,7 @@ def _apply_info(raw: RawStock, info: dict) -> None:
 def _apply_history(raw: RawStock, closes: list[float], volumes: list[float]) -> None:
     if not closes:
         return
+    raw.closes = [float(c) for c in closes[-60:] if c is not None]
     raw.price = float(closes[-1])
     raw.day_change_pct = day_change_pct(closes)
     raw.return_pct = trailing_return_pct(closes, lookback=21)

@@ -309,7 +309,7 @@ npm run export:snapshot   # → dist/snapshot-export.html (전달/아카이브�
 | 요약 | 진행현황 |
 |---|---|
 | ![요약](docs/assets/tab-summary.png) | ![진행현황](docs/assets/tab-progress.png) |
-| 듀얼 국면(미국/한국 4-state·축별 percentile·전이/streak) + KPI strip | 후보 universe(매력도순·한·미 혼합·PER vs 동종군·연결 렌즈) |
+| 듀얼 국면(미국/한국 4-state·축별 percentile·전이/streak) + KPI strip | 후보 universe(매력도순·한·미 혼합·PER vs 동종군·연결 렌즈·60일 가격 흐름 sparkline) |
 
 | 주의 필요 | 근거 |
 |---|---|

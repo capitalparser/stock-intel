@@ -144,6 +144,7 @@ def _apply_price_series(raw: RawStock, technical: dict | None) -> None:
     closes = _safe_ohlcv_closes(raw.ticker)
     if not closes:
         return
+    raw.closes = [float(c) for c in closes[-60:] if c is not None]
     if raw.price is None:
         raw.price = float(closes[-1])
     if raw.day_change_pct is None:

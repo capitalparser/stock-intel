@@ -117,6 +117,24 @@ function progressPanel(snapshot: DashboardSnapshot) {
   // React CandidateTable의 isBlocked와 동일 기준(status 또는 independence_status에 BLOCK) — 라벨·정렬 일치.
   const isBlocked = (c: DashboardSnapshot["candidates"][number]) =>
     c.status.toUpperCase().includes("BLOCK") || (c.independence_status ?? "").toUpperCase().includes("BLOCK");
+  // React Sparkline(info색 monotone 라인) 미러 — 인라인 SVG로 self-contained 유지.
+  const spark = (vals?: number[]) => {
+    const v = (vals ?? []).filter((x) => x != null);
+    if (v.length < 2) return "";
+    const w = 112;
+    const h = 36;
+    const pad = 2;
+    const min = Math.min(...v);
+    const span = Math.max(...v) - min || 1;
+    const pts = v
+      .map((value, i) => {
+        const x = (i / (v.length - 1)) * w;
+        const y = pad + (h - 2 * pad) * (1 - (value - min) / span);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+    return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" aria-label="가격 흐름"><polyline fill="none" stroke="#175cd3" stroke-width="2" points="${pts}"/></svg>`;
+  };
   const rows = snapshot.candidates
     .slice()
     .sort((a, b) => {
@@ -126,9 +144,9 @@ function progressPanel(snapshot: DashboardSnapshot) {
       return (b.score ?? -1) - (a.score ?? -1);
     })
     .slice(0, 50)
-    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${isBlocked(candidate) ? "차단" : "정상"}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="5">${escapeHtml(candidate.thesis)}</td></tr>`)
+    .map((candidate) => `<tr data-toggle="#detail-${escapeHtml(candidate.ticker)}"><td>${escapeHtml(candidate.ticker)}<br><span class="muted">${escapeHtml(candidate.company)}</span></td><td>${escapeHtml(candidate.score ?? "-")}</td><td>${escapeHtml(candidate.pe ?? "-")}</td><td>${escapeHtml(candidate.strongest_lens || candidate.linked_lenses[0]?.name || "-")}</td><td>${isBlocked(candidate) ? "차단" : "정상"}</td><td>${spark(candidate.price_series)}</td></tr><tr id="detail-${escapeHtml(candidate.ticker)}" class="detail-row" hidden><td colspan="6">${escapeHtml(candidate.thesis)}</td></tr>`)
     .join("");
-  return `<table><thead><tr><th>종목</th><th>매력도</th><th>PER</th><th>렌즈</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table><thead><tr><th>종목</th><th>매력도</th><th>PER</th><th>렌즈</th><th>상태</th><th>흐름</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function attentionPanel(snapshot: DashboardSnapshot) {
