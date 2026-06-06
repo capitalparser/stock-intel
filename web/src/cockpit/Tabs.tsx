@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { commonCockpitTabs } from "../../../../00_personal_agent_system/design-kit/typescript/src/cockpitProfiles";
+import { commonCockpitTabs } from "../lib/designKit";
 
 const tabRoutes: Record<(typeof commonCockpitTabs)[number], string> = {
   요약: "/",

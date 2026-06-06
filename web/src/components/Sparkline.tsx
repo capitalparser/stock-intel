@@ -1,5 +1,5 @@
 import { Line, LineChart, ResponsiveContainer } from "recharts";
-import { pasTokens } from "../../../../00_personal_agent_system/design-kit/typescript/src/tokens";
+import { pasTokens } from "../lib/designKit";
 
 type SparklineProps = {
   label: string;

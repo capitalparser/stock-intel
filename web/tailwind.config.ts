@@ -1,5 +1,5 @@
 import type { Config } from "tailwindcss";
-import { pasTokens } from "../../00_personal_agent_system/design-kit/typescript/src/tokens";
+import { pasTokens } from "./src/lib/designKit";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}", "./tests/**/*.{ts,tsx}"],

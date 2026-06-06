@@ -1,5 +1,5 @@
-import { pasTokens } from "../../../../00_personal_agent_system/design-kit/typescript/src/tokens";
-import { commonCockpitTabs } from "../../../../00_personal_agent_system/design-kit/typescript/src/cockpitProfiles";
+import { pasTokens } from "../lib/designKit";
+import { commonCockpitTabs } from "../lib/designKit";
 import { DashboardSnapshot } from "../data/snapshot";
 import { attentionCategories, getAttentionCategories } from "../lib/risk";
 

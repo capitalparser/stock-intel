@@ -25,7 +25,12 @@ function isBlocked(candidate: Candidate) {
 }
 
 export function CandidateTable({ candidates }: CandidateTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "score", desc: true }]);
+  // BLOCKED(독립성 차단)은 기본 정렬에서 맨 뒤로 강등(매입금지 종목을 상단에 안 띄움) — Opus review should-fix.
+  // 사용자가 컬럼 헤더로 직접 정렬하면 override됨.
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "blocked", desc: false },
+    { id: "score", desc: true },
+  ]);
   const [globalFilter, setGlobalFilter] = useState("");
 
   const columns = useMemo<ColumnDef<Candidate>[]>(
@@ -58,6 +63,7 @@ export function CandidateTable({ candidates }: CandidateTableProps) {
       {
         id: "blocked",
         header: "상태",
+        accessorFn: (row) => (isBlocked(row) ? 1 : 0),  // 0=비차단 먼저, 1=차단 맨뒤
         cell: ({ row }) =>
           isBlocked(row.original) ? <Badge tone="risk">BLOCKED</Badge> : <span className="text-xs text-textMuted">BLOCKED 확인</span>,
       },
