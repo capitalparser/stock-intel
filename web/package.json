@@ -8,7 +8,9 @@
     "test": "vitest run",
     "prebuild": "node scripts/copy-snapshot.mjs",
     "build": "tsc -b && vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "export:snapshot": "tsx scripts/write-export.ts",
+    "validate:export": "node scripts/validate-export.mjs dist/snapshot-export.html"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "latest",
