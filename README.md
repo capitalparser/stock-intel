@@ -304,6 +304,23 @@ npm run export:snapshot   # → dist/snapshot-export.html (전달/아카이브�
 
 스크린샷은 `npm run export:snapshot` 산출물(self-contained, no CDN, footer에 소스·ISO8601 KST·데이터 윈도우·data hash)입니다.
 
+#### 탭 둘러보기
+
+| 요약 | 진행현황 |
+|---|---|
+| ![요약](docs/assets/tab-summary.png) | ![진행현황](docs/assets/tab-progress.png) |
+| 듀얼 국면(미국/한국 4-state·축별 percentile·전이/streak) + KPI strip | 후보 universe(매력도순·한·미 혼합·PER vs 동종군·연결 렌즈) |
+
+| 주의 필요 | 근거 |
+|---|---|
+| ![주의 필요](docs/assets/tab-attention.png) | ![근거](docs/assets/tab-evidence.png) |
+| 차단/과열/위험/공매도/데이터부족 필터 + 종목별 플래그 | 선택 종목 Inspector(지표·독립성·catalyst·밸류에이션·기술 세부정보) |
+
+| 다음 행동 |
+|---|
+| ![다음 행동](docs/assets/tab-next.png) |
+| 후보별 next action + 국면 다음 행동 |
+
 ## Production Direction
 
 개인 실사용은 작은 VPS 1대에 올리는 구성이 가장 단순합니다.
