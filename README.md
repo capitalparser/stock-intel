@@ -283,7 +283,26 @@ uv run python scripts/render_lens_dashboard.py
 - **정책 렌즈** — 정부·규제 정책이 드라이버인 수혜주를 추적하는 카테고리(`LensKind.POLICY`). 첫 인스턴스는 **저PBR 밸류업**으로, 큐레이션 시드 + `PBR < 0.5` 자동 스크린의 하이브리드 멤버십입니다.
 - **데이터 정직성** — 모든 소스는 graceful degradation을 따르며, 실데이터 미연결·프록시 사용은 카드에 `데이터 부족`/`프록시`로 명시합니다(중립값을 실데이터처럼 보이지 않게).
 
-> 위 스크린샷은 실데이터 스냅샷 기반 렌더 예시입니다. 데이터 소스 지연·미수집 가능성이 있으므로 주문 전 원천 데이터를 확인하는 습관을 유지하세요.
+> 위 스크린샷은 design-kit Lane B cockpit의 Snapshot Export(단일 HTML) 예시입니다. 데이터 소스 지연·미수집 가능성이 있으므로 주문 전 원천 데이터를 확인하는 습관을 유지하세요.
+
+### React 대시보드 (Lane B Cockpit)
+
+상황판 UI는 PAS Delivery Studio **design-kit Lane B** 양식을 따릅니다 — Vite + React 19 + Tailwind v4 + design-kit `pasTokens`/cockpit 프로필, 5공통탭(요약·진행현황·주의 필요·근거·다음 행동), Recharts·TanStack Table. Python 파이프라인이 만든 데이터 계약(`dashboard-latest.json`)을 소비합니다.
+
+```bash
+# 데이터 계약 export (Python)
+set -a; source .env; set +a
+uv run python scripts/build_dashboard_snapshot.py   # 실데이터 스냅샷
+uv run python scripts/export_dashboard_json.py      # → state/dashboard/cache/dashboard-latest.json
+
+# React 대시보드 (web/)
+cd web
+npm install
+npm run dev               # 매일 보는 인터랙티브 대시보드
+npm run export:snapshot   # → dist/snapshot-export.html (전달/아카이브용 단일 HTML, 위 스크린샷)
+```
+
+스크린샷은 `npm run export:snapshot` 산출물(self-contained, no CDN, footer에 소스·ISO8601 KST·데이터 윈도우·data hash)입니다.
 
 ## Production Direction
 
